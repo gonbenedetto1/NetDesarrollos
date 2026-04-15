@@ -1,0 +1,8 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; overflow: hidden; }
+button { cursor: pointer; font-family: inherit; border: none; background: none; }
+input, textarea, select { font-family: inherit; font-size: inherit; }
+a { text-decoration: none; color: inherit; }
+ul, ol { list-style: none; }
+img { display: block; max-width: 100%; }
