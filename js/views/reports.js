@@ -191,6 +191,7 @@ const ReportsView = {
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
           <span class="section-title">Presupuesto de Marketing</span>
           <span class="badge badge-medium">Por sistema · ${new Date().getFullYear()}</span>
+          <button class="btn btn-secondary btn-xs" id="edit-budgets-btn" style="margin-left:auto">${Utils.icon('edit',13)} Editar presupuestos</button>
         </div>
         <div class="chart-bar-container">
           ${marketing.map(m => {
@@ -224,5 +225,7 @@ const ReportsView = {
           </div>
         </div>
       </div>`;
+
+    document.getElementById('edit-budgets-btn')?.addEventListener('click', () => Modal.openBudgets());
   },
 };

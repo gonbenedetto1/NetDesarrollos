@@ -12,7 +12,12 @@ const Store = (() => {
   function loadState() {
     try {
       const saved = localStorage.getItem(KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Backwards compat: if budgets missing, seed from defaults
+        if (!parsed.budgets) parsed.budgets = JSON.parse(JSON.stringify(MARKETING_BUDGETS));
+        return parsed;
+      }
     } catch(e) {}
     return {
       systems:   JSON.parse(JSON.stringify(SYSTEMS)),
@@ -20,6 +25,7 @@ const Store = (() => {
       blocks:    JSON.parse(JSON.stringify(BLOCKS)),
       activity:  JSON.parse(JSON.stringify(ACTIVITY)),
       comments:  JSON.parse(JSON.stringify(COMMENTS)),
+      budgets:   JSON.parse(JSON.stringify(MARKETING_BUDGETS)),
       notifications: [],
     };
   }
@@ -240,6 +246,13 @@ const Store = (() => {
     resetToDefaults,
     getUsers() { return USERS; },
     getUserById(id) { return USERS.find(u => u.id === id); },
-    getMarketingBudgets() { return MARKETING_BUDGETS; },
+    getMarketingBudgets() { return state.budgets || []; },
+    updateMarketingBudget(systemId, data) {
+      if (!state.budgets) return;
+      const i = state.budgets.findIndex(b => b.systemId === systemId);
+      if (i < 0) return;
+      state.budgets[i] = { ...state.budgets[i], ...data };
+      save(); emit('budgets:changed'); return state.budgets[i];
+    },
   };
 })();

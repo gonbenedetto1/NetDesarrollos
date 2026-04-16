@@ -297,6 +297,95 @@ const Modal = {
       this.close(); Sidebar.render();
     };
   },
+
+  // ── Budgets modal ────────────────────────
+  openBudgets() {
+    const budgets = Store.getMarketingBudgets();
+    this.open(`
+      <div class="modal-header">
+        <span class="modal-title">Editar presupuestos de marketing</span>
+        <button class="modal-close" id="mc-close">${Utils.icon('close',14)}</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12.5px;color:var(--text-3);margin-bottom:16px">Actualiza el presupuesto total y el monto gastado por cada sistema.</p>
+        ${budgets.map(b => {
+          const sys = Store.getSystemById(b.systemId);
+          return `
+          <div style="padding:12px;background:var(--bg-input);border-radius:var(--r-md);margin-bottom:10px" data-budget-row="${b.systemId}">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              ${sys ? `<div style="width:8px;height:8px;border-radius:50%;background:${sys.color}"></div>` : ''}
+              <span style="font-size:13px;font-weight:600;color:var(--text-1)">${b.name}</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label" style="font-size:11.5px">Presupuesto total</label>
+                <input class="form-input budget-input" data-field="budget" type="number" min="0" value="${b.budget}">
+              </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label class="form-label" style="font-size:11.5px">Gastado</label>
+                <input class="form-input budget-input" data-field="spent" type="number" min="0" value="${b.spent}">
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" id="mc-cancel">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="mc-save">Guardar cambios</button>
+      </div>`);
+
+    document.getElementById('mc-close').onclick  = () => this.close();
+    document.getElementById('mc-cancel').onclick = () => this.close();
+    document.getElementById('mc-save').onclick   = () => {
+      document.querySelectorAll('[data-budget-row]').forEach(row => {
+        const systemId = row.dataset.budgetRow;
+        const budget = parseFloat(row.querySelector('[data-field="budget"]').value) || 0;
+        const spent  = parseFloat(row.querySelector('[data-field="spent"]').value)  || 0;
+        Store.updateMarketingBudget(systemId, { budget, spent });
+      });
+      Utils.toast('Presupuestos actualizados', 'success');
+      this.close();
+      if (typeof ReportsView !== 'undefined') ReportsView.render();
+    };
+  },
+
+  // ── Complete task modal ──────────────────
+  openCompleteTask(taskId) {
+    const task = Store.getTaskById(taskId);
+    if (!task) return;
+    const suggested = task.actualHours || task.estimatedHours || 0;
+    this.open(`
+      <div class="modal-header">
+        <span class="modal-title">Finalizar tarea</span>
+        <button class="modal-close" id="mc-close">${Utils.icon('close',14)}</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:var(--green-bg);border-radius:var(--r-md);padding:12px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:600;color:var(--green-text);margin-bottom:3px">${task.title}</div>
+          <div style="font-size:12px;color:var(--green-text);opacity:0.8">La tarea quedara marcada como finalizada.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Horas reales aproximadas</label>
+          <input class="form-input" type="number" id="complete-hours" min="0" step="0.5" value="${suggested}" placeholder="Ej: 8">
+          <div class="form-hint" style="margin-top:4px">Cuanto tiempo te llevo la tarea en total. Estimacion original: ${task.estimatedHours || 0}h.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" id="mc-cancel">Cancelar</button>
+        <button class="btn btn-sm" id="mc-confirm" style="background:var(--green);color:white">Finalizar</button>
+      </div>`);
+
+    document.getElementById('mc-close').onclick   = () => this.close();
+    document.getElementById('mc-cancel').onclick  = () => this.close();
+    document.getElementById('mc-confirm').onclick = () => {
+      const hours = parseFloat(document.getElementById('complete-hours').value) || 0;
+      Store.updateTask(taskId, { status: 'done', progress: 100, actualHours: hours });
+      Utils.toast('Tarea finalizada', 'success');
+      this.close();
+      Panel.openTask(taskId);
+    };
+    setTimeout(() => { const inp = document.getElementById('complete-hours'); if (inp) inp.select(); }, 100);
+  },
 };
 
 // ══════════════════════════════════════════════
@@ -459,16 +548,25 @@ const Panel = {
       slider.oninput = () => {
         clearTimeout(timeout);
         timeout = setTimeout(() => {
-          Store.updateTask(taskId, { progress: parseInt(slider.value) });
-          if (parseInt(slider.value) === 100) { Store.updateTask(taskId, { status: 'done' }); Utils.toast('¡Tarea finalizada!','success'); }
+          const val = parseInt(slider.value);
+          if (val === 100 && task.status !== 'done') {
+            // Reset visual to current task progress while the dialog decides
+            slider.value = task.progress;
+            Modal.openCompleteTask(taskId);
+          } else {
+            Store.updateTask(taskId, { progress: val });
+          }
         }, 400);
       };
     }
 
     const cont = document.getElementById('panel-container');
     Utils.on(cont, 'click', '[data-set-status]', function() {
+      if (this.dataset.setStatus === 'done') {
+        Modal.openCompleteTask(taskId);
+        return;
+      }
       Store.updateTask(taskId, { status: this.dataset.setStatus });
-      if (this.dataset.setStatus === 'done') Utils.toast('¡Tarea finalizada!','success');
       Panel.openTask(taskId);
     });
     Utils.on(cont, 'click', '[data-open-block]',    function() { Modal.openBlock(this.dataset.openBlock); });
