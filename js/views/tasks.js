@@ -42,7 +42,7 @@ const TasksView = {
         <input class="filter-input" id="task-search" placeholder="Buscar tarea..." value="${this.searchQuery}">
         <button class="filter-chip ${this.currentFilter === 'all' ? 'active' : ''}" data-filter="all">Todas</button>
         <button class="filter-chip ${this.currentFilter === 'in_progress' ? 'active' : ''}" data-filter="in_progress">En progreso</button>
-        <button class="filter-chip ${this.currentFilter === 'blocked' ? 'active' : ''}" data-filter="blocked" style="${this.currentFilter === 'blocked' ? '' : 'color:var(--red);border-color:#FFCDD3'}">Bloqueadas</button>
+        <button class="filter-chip ${this.currentFilter === 'blocked' ? 'active' : ''}" data-filter="blocked" style="${this.currentFilter === 'blocked' ? 'background:var(--red-bg);color:var(--red-text);border-color:#FFCDD3' : 'color:var(--red);border-color:#FFCDD3'}">Bloqueadas</button>
         <button class="filter-chip ${this.currentFilter === 'review' ? 'active' : ''}" data-filter="review">En revisión</button>
         <button class="filter-chip ${this.currentFilter === 'pending' ? 'active' : ''}" data-filter="pending">Pendientes</button>
         <button class="filter-chip ${this.currentFilter === 'done' ? 'active' : ''}" data-filter="done">Finalizadas</button>
@@ -183,8 +183,9 @@ const TasksView = {
       const btn = e.target.closest('[data-filter]');
       if (!btn) return;
       this.currentFilter = btn.dataset.filter;
-      Utils.qsa('[data-filter]', content).forEach(el => el.classList.toggle('active', el.dataset.filter === this.currentFilter));
-      this.renderTable();
+      // Bloqueadas es global: cambia a la tab "Todas las tareas" asi se ven las de todo el equipo
+      if (this.currentFilter === 'blocked') this.currentTab = 'all';
+      this.render();
     });
 
     const searchInput = document.getElementById('task-search');
