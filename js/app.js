@@ -89,16 +89,15 @@ const App = {
 
 // ── Boot ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Auto-reset old data format (v1 users had no email field)
+  // Auto-reset: when demo tasks exist (t1..t15), clear storage so the app starts empty
   try {
     const saved = localStorage.getItem('snet_v2');
     if (saved) {
       const parsed = JSON.parse(saved);
-      const firstTask = parsed.tasks && parsed.tasks[0];
-      if (firstTask && firstTask.assignedTo === 'u2' && firstTask.title && firstTask.title.includes('listados')) {
-        // Old mock data detected, reset
+      const hasDemoTasks = parsed.tasks && parsed.tasks.some(t => /^t([1-9]|1[0-5])$/.test(t.id));
+      if (hasDemoTasks) {
         localStorage.removeItem('snet_v2');
-        localStorage.removeItem('snet_auth');
+        // Keep auth so user stays logged in
       }
     }
   } catch(e) {}

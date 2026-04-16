@@ -199,7 +199,7 @@ const Store = (() => {
     const today = new Date().toISOString().split('T')[0];
     return {
       active:    tasks.filter(t => ['in_progress','review'].includes(t.status)).length,
-      doneToday: tasks.filter(t => t.status === 'done' && (t.updatedAt||'').startsWith(today)).length + 3,
+      doneToday: tasks.filter(t => t.status === 'done' && (t.updatedAt||'').startsWith(today)).length,
       blocked:   state.blocks.filter(b => b.status === 'active').length,
       review:    tasks.filter(t => t.status === 'review').length,
     };
