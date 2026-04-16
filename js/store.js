@@ -130,6 +130,19 @@ const Store = (() => {
     _logActivity(resolvedBy, 'resolved', b.taskId, `resolvió el bloqueo de "${getTaskById(b.taskId)?.title || ''}"`);
     save(); emit('blocks:changed');
   }
+  function deleteBlock(blockId) {
+    const i = state.blocks.findIndex(b => b.id === blockId);
+    if (i < 0) return;
+    const b = state.blocks[i];
+    state.blocks.splice(i, 1);
+    // If no more active blocks for this task, return it to in_progress
+    const stillBlocked = state.blocks.some(bl => bl.taskId === b.taskId && bl.status === 'active');
+    if (!stillBlocked && b.status === 'active') {
+      const task = getTaskById(b.taskId);
+      if (task && task.status === 'blocked') updateTask(b.taskId, { status: 'in_progress' });
+    }
+    save(); emit('blocks:changed');
+  }
 
   // ── Comments ──────────────────────────────────────
   function getComments(taskId) { return state.comments[taskId] || []; }
@@ -233,7 +246,7 @@ const Store = (() => {
     // Tasks
     getTasks, getTaskById, createTask, updateTask,
     // Blocks
-    getBlocks, getBlocksForTask, createBlock, resolveBlock,
+    getBlocks, getBlocksForTask, createBlock, resolveBlock, deleteBlock,
     // Comments
     getComments, addComment,
     // Notifications

@@ -561,17 +561,25 @@ const Panel = {
     }
 
     const cont = document.getElementById('panel-container');
-    Utils.on(cont, 'click', '[data-set-status]', function() {
-      if (this.dataset.setStatus === 'done') {
-        Modal.openCompleteTask(taskId);
-        return;
-      }
-      Store.updateTask(taskId, { status: this.dataset.setStatus });
-      Panel.openTask(taskId);
+    // Assign onclick directly on elements (not delegation) to avoid duplicate listeners
+    // when the same panel is opened multiple times. innerHTML was just replaced, so these
+    // elements are fresh — no old handlers remain.
+    cont.querySelectorAll('[data-set-status]').forEach(el => {
+      el.onclick = () => {
+        if (el.dataset.setStatus === 'done') { Modal.openCompleteTask(taskId); return; }
+        Store.updateTask(taskId, { status: el.dataset.setStatus });
+        Panel.openTask(taskId);
+      };
     });
-    Utils.on(cont, 'click', '[data-open-block]',    function() { Modal.openBlock(this.dataset.openBlock); });
-    Utils.on(cont, 'click', '[data-resolve-block]', function() { Modal.openResolve(this.dataset.resolveBlock); });
-    Utils.on(cont, 'click', '[data-edit-task]',     function() { Modal.openTask(Store.getTaskById(this.dataset.editTask)); });
+    cont.querySelectorAll('[data-open-block]').forEach(el => {
+      el.onclick = () => Modal.openBlock(el.dataset.openBlock);
+    });
+    cont.querySelectorAll('[data-resolve-block]').forEach(el => {
+      el.onclick = () => Modal.openResolve(el.dataset.resolveBlock);
+    });
+    cont.querySelectorAll('[data-edit-task]').forEach(el => {
+      el.onclick = () => Modal.openTask(Store.getTaskById(el.dataset.editTask));
+    });
 
     const send = document.getElementById('comment-send');
     const inp  = document.getElementById('comment-input');

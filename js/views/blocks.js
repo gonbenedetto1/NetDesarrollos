@@ -112,6 +112,9 @@ const BlocksView = {
               <button class="btn btn-sm" style="background:var(--green);color:white" data-resolve-block="${b.id}">
                 ${Utils.icon('check', 13)} Resolver
               </button>
+              <button class="btn btn-ghost btn-sm" data-delete-block="${b.id}" title="Descartar (bloqueo creado por error)" style="color:var(--text-3)">
+                ${Utils.icon('close', 13)}
+              </button>
             </div>
           </div>
         </div>`;
@@ -191,12 +194,23 @@ const BlocksView = {
     const container = document.getElementById('blocks-content');
     if (!container) return;
 
-    Utils.on(container, 'click', '[data-open-task]', function() {
-      Panel.openTask(this.dataset.openTask);
+    // Assign onclick directly to avoid duplicate listeners on re-render
+    container.querySelectorAll('[data-open-task]').forEach(el => {
+      el.onclick = () => Panel.openTask(el.dataset.openTask);
     });
-    Utils.on(container, 'click', '[data-resolve-block]', function(e) {
-      e.stopPropagation();
-      Modal.openResolve(this.dataset.resolveBlock);
+    container.querySelectorAll('[data-resolve-block]').forEach(el => {
+      el.onclick = (e) => { e.stopPropagation(); Modal.openResolve(el.dataset.resolveBlock); };
+    });
+    container.querySelectorAll('[data-delete-block]').forEach(el => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        if (!confirm('Descartar este bloqueo? Usa esto cuando fue creado por error. Si queres marcar que ya se resolvio usa "Resolver".')) return;
+        Store.deleteBlock(el.dataset.deleteBlock);
+        Utils.toast('Bloqueo descartado', 'success');
+        BlocksView.renderContent();
+        BlocksView.attachContentEvents();
+        Sidebar.render();
+      };
     });
   },
 };
