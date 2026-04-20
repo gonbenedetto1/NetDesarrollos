@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════
-//  APP.JS — Router + Auth gate + Init
+//  APP.JS — Router + Auth gate + Init (Supabase)
 // ═══════════════════════════════════════════════════════
 
 // Stores last topbar config so views can re-render it after mutations
@@ -24,7 +24,6 @@ const Router = {
     if (parts[0] === 'notifications') {
       Notifications.openPanel();
       Sidebar.setActive('/notifications');
-      // Stay on current view (just open panel)
       return;
     }
 
@@ -53,12 +52,26 @@ const Router = {
 // ═══════════════════════════════════════════════════════
 
 const App = {
-  init() {
+  async init() {
     const user = Store.getCurrentUser();
     if (!user) { LoginView.render(); return; }
 
+    // Show loading state
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
+    document.getElementById('view-content').innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;height:50vh;flex-direction:column;gap:12px">
+        <div style="width:32px;height:32px;border:3px solid var(--border-2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+        <span style="font-size:13px;color:var(--text-3)">Cargando datos...</span>
+      </div>
+      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>`;
+
+    // Load all data from Supabase
+    try {
+      await Store.load();
+    } catch (e) {
+      console.error('Error loading data:', e);
+    }
 
     Sidebar.render();
     Notifications.render();
@@ -88,30 +101,15 @@ const App = {
 };
 
 // ── Boot ──────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  // Auto-reset: when demo tasks exist (t1..t15), clear storage so the app starts empty
-  try {
-    const saved = localStorage.getItem('snet_v2');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      const hasDemoTasks = parsed.tasks && parsed.tasks.some(t => /^t([1-9]|1[0-5])$/.test(t.id));
-      if (hasDemoTasks) {
-        localStorage.removeItem('snet_v2');
-        // Keep auth so user stays logged in
-      }
-    }
-  } catch(e) {}
-
-  const user = Store.getCurrentUser();
+document.addEventListener('DOMContentLoaded', async () => {
+  // Try to restore Supabase session
+  const user = await Store.restoreSession();
   if (user) {
     App.init();
   } else {
     LoginView.render();
   }
 
-  // Dev helper
-  window._reset = () => { Store.resetToDefaults(); Store.logout(); location.reload(); };
   console.log('%cSistema NET', 'font-size:16px;font-weight:bold;color:#0071E3');
-  console.log('Login con email. Contrasenas: nombre en minusculas (miguel, gonzalo, camilo)');
-  console.log('_reset() para limpiar todo');
+  console.log('Conectado a Supabase');
 });
