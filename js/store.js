@@ -33,14 +33,14 @@ const Store = (() => {
   // ══════════════════════════════════════════════════════
   async function loadFromSupabase() {
     const [profiles, systems, tasks, blocks, comments, activity, budgets, notifs] = await Promise.all([
-      supabase.from('profiles').select('*'),
-      supabase.from('systems').select('*').order('created_at'),
-      supabase.from('tasks').select('*').order('created_at'),
-      supabase.from('blocks').select('*').order('created_at', { ascending: false }),
-      supabase.from('comments').select('*').order('created_at'),
-      supabase.from('activity').select('*').order('created_at', { ascending: false }).limit(200),
-      supabase.from('budgets').select('*'),
-      supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(50),
+      sb.from('profiles').select('*'),
+      sb.from('systems').select('*').order('created_at'),
+      sb.from('tasks').select('*').order('created_at'),
+      sb.from('blocks').select('*').order('created_at', { ascending: false }),
+      sb.from('comments').select('*').order('created_at'),
+      sb.from('activity').select('*').order('created_at', { ascending: false }).limit(200),
+      sb.from('budgets').select('*'),
+      sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(50),
     ]);
 
     state.users    = profiles.data || [];
@@ -63,7 +63,7 @@ const Store = (() => {
   //  REALTIME — subscribe to changes from other users
   // ══════════════════════════════════════════════════════
   function subscribeRealtime() {
-    supabase.channel('db-changes')
+    sb.channel('db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => refreshTable('tasks'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, () => refreshTable('blocks'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comments' }, () => refreshTable('comments'))
@@ -76,7 +76,7 @@ const Store = (() => {
 
   async function refreshTable(table) {
     if (table === 'comments') {
-      const { data } = await supabase.from('comments').select('*').order('created_at');
+      const { data } = await sb.from('comments').select('*').order('created_at');
       state.comments = {};
       (data || []).forEach(c => {
         if (!state.comments[c.task_id]) state.comments[c.task_id] = [];
@@ -85,17 +85,17 @@ const Store = (() => {
       _addCompatToAll();
       emit('comments:changed');
     } else if (table === 'notifications') {
-      const { data } = await supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(50);
+      const { data } = await sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(50);
       state.notifications = data || [];
       _addCompatToAll();
       emit('notifications:changed');
     } else if (table === 'activity') {
-      const { data } = await supabase.from('activity').select('*').order('created_at', { ascending: false }).limit(200);
+      const { data } = await sb.from('activity').select('*').order('created_at', { ascending: false }).limit(200);
       state.activity = data || [];
       _addCompatToAll();
       emit('activity:changed');
     } else {
-      const { data } = await supabase.from(table).select('*').order('created_at');
+      const { data } = await sb.from(table).select('*').order('created_at');
       state[table] = data || [];
       _addCompatToAll();
       emit(table + ':changed');
@@ -108,24 +108,24 @@ const Store = (() => {
   function getCurrentUser() { return currentUser; }
 
   async function login(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) return { ok: false, error: error.message };
     // Fetch profile
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+    const { data: profile } = await sb.from('profiles').select('*').eq('id', data.user.id).single();
     currentUser = profile ? { ...profile, email: data.user.email } : { id: data.user.id, name: email.split('@')[0], email: data.user.email, initials: email.slice(0,2).toUpperCase(), role: 'developer', color: '#0071E3', bg: '#EBF2FD' };
     return { ok: true, user: currentUser };
   }
 
   async function restoreSession() {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await sb.auth.getSession();
     if (!session) return null;
-    const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+    const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
     currentUser = profile ? { ...profile, email: session.user.email } : null;
     return currentUser;
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    await sb.auth.signOut();
     currentUser = null;
   }
 
@@ -136,7 +136,7 @@ const Store = (() => {
   function getSystemById(id) { return state.systems.find(s => s.id === id); }
 
   async function createSystem(data) {
-    const { data: s, error } = await supabase.from('systems').insert({ name: data.name, description: data.description || '', color: data.color || '#0071E3', members: data.members || [currentUser?.id] }).select().single();
+    const { data: s, error } = await sb.from('systems').insert({ name: data.name, description: data.description || '', color: data.color || '#0071E3', members: data.members || [currentUser?.id] }).select().single();
     if (error) { console.error(error); return null; }
     state.systems.push(s);
     emit('systems:changed');
@@ -149,7 +149,7 @@ const Store = (() => {
     if (data.description !== undefined) payload.description = data.description;
     if (data.color !== undefined) payload.color = data.color;
     if (data.members !== undefined) payload.members = data.members;
-    const { data: s, error } = await supabase.from('systems').update(payload).eq('id', id).select().single();
+    const { data: s, error } = await sb.from('systems').update(payload).eq('id', id).select().single();
     if (error) { console.error(error); return null; }
     const i = state.systems.findIndex(x => x.id === id);
     if (i >= 0) state.systems[i] = s;
@@ -186,7 +186,7 @@ const Store = (() => {
       tags: data.tags || [],
       attachments: data.attachments || [],
     };
-    const { data: t, error } = await supabase.from('tasks').insert(row).select().single();
+    const { data: t, error } = await sb.from('tasks').insert(row).select().single();
     if (error) { console.error(error); return null; }
     state.tasks.push(t);
 
@@ -222,7 +222,7 @@ const Store = (() => {
     if (data.tags !== undefined)            payload.tags = data.tags;
     if (data.attachments !== undefined)     payload.attachments = data.attachments;
 
-    const { data: t, error } = await supabase.from('tasks').update(payload).eq('id', id).select().single();
+    const { data: t, error } = await sb.from('tasks').update(payload).eq('id', id).select().single();
     if (error) { console.error(error); return null; }
 
     const i = state.tasks.findIndex(x => x.id === id);
@@ -254,7 +254,7 @@ const Store = (() => {
   function getBlocksForTask(taskId) { return state.blocks.filter(b => b.task_id === taskId); }
 
   async function createBlock(taskId, description, reportedBy) {
-    const { data: b, error } = await supabase.from('blocks').insert({ task_id: taskId, description, reported_by: reportedBy, status: 'active', severity: 'high' }).select().single();
+    const { data: b, error } = await sb.from('blocks').insert({ task_id: taskId, description, reported_by: reportedBy, status: 'active', severity: 'high' }).select().single();
     if (error) { console.error(error); return null; }
     state.blocks.unshift(b);
     await updateTask(taskId, { status: 'blocked' });
@@ -265,7 +265,7 @@ const Store = (() => {
   async function resolveBlock(blockId, resolvedBy, note) {
     const b = state.blocks.find(x => x.id === blockId);
     if (!b) return;
-    const { error } = await supabase.from('blocks').update({ status: 'resolved', resolved_by: resolvedBy, resolution_note: note, resolved_at: new Date().toISOString() }).eq('id', blockId);
+    const { error } = await sb.from('blocks').update({ status: 'resolved', resolved_by: resolvedBy, resolution_note: note, resolved_at: new Date().toISOString() }).eq('id', blockId);
     if (error) { console.error(error); return; }
 
     const i = state.blocks.findIndex(x => x.id === blockId);
@@ -280,7 +280,7 @@ const Store = (() => {
   async function deleteBlock(blockId) {
     const b = state.blocks.find(x => x.id === blockId);
     if (!b) return;
-    await supabase.from('blocks').delete().eq('id', blockId);
+    await sb.from('blocks').delete().eq('id', blockId);
     state.blocks = state.blocks.filter(x => x.id !== blockId);
     const stillBlocked = state.blocks.some(bl => bl.task_id === b.task_id && bl.status === 'active');
     if (!stillBlocked && b.status === 'active') {
@@ -296,7 +296,7 @@ const Store = (() => {
   function getComments(taskId) { return state.comments[taskId] || []; }
 
   async function addComment(taskId, userId, text) {
-    const { data: c, error } = await supabase.from('comments').insert({ task_id: taskId, user_id: userId, text }).select().single();
+    const { data: c, error } = await sb.from('comments').insert({ task_id: taskId, user_id: userId, text }).select().single();
     if (error) { console.error(error); return null; }
     if (!state.comments[taskId]) state.comments[taskId] = [];
     state.comments[taskId].push(c);
@@ -324,20 +324,20 @@ const Store = (() => {
   function getUnreadCount(userId)   { return getNotifications(userId).filter(n => !n.read).length; }
 
   async function markAllRead(userId) {
-    await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
+    await sb.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
     state.notifications.forEach(n => { if (n.user_id === userId) n.read = true; });
     emit('notifications:changed');
   }
 
   async function markRead(notifId) {
-    await supabase.from('notifications').update({ read: true }).eq('id', notifId);
+    await sb.from('notifications').update({ read: true }).eq('id', notifId);
     const n = state.notifications.find(x => x.id === notifId);
     if (n) n.read = true;
     emit('notifications:changed');
   }
 
   async function _addNotification(userId, type, taskId, text) {
-    const { data: n } = await supabase.from('notifications').insert({ user_id: userId, type, task_id: taskId, text }).select().single();
+    const { data: n } = await sb.from('notifications').insert({ user_id: userId, type, task_id: taskId, text }).select().single();
     if (n) state.notifications.unshift(n);
     emit('notifications:changed');
   }
@@ -348,7 +348,7 @@ const Store = (() => {
   function getActivity(limit = 20) { return state.activity.slice(0, limit); }
 
   async function _logActivity(userId, action, taskId, text) {
-    const { data: a } = await supabase.from('activity').insert({ user_id: userId, action, task_id: taskId, text }).select().single();
+    const { data: a } = await sb.from('activity').insert({ user_id: userId, action, task_id: taskId, text }).select().single();
     if (a) state.activity.unshift(a);
     emit('activity:changed');
   }
@@ -364,7 +364,7 @@ const Store = (() => {
     const payload = {};
     if (data.budget !== undefined) payload.budget = data.budget;
     if (data.spent !== undefined)  payload.spent = data.spent;
-    await supabase.from('budgets').update(payload).eq('system_id', systemId);
+    await sb.from('budgets').update(payload).eq('system_id', systemId);
     Object.assign(b, payload);
     emit('budgets:changed');
     return b;
