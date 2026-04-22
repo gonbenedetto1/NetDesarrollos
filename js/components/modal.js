@@ -391,10 +391,11 @@ const Modal = {
   openLead(prefill = {}) {
     const systems = Store.getSystems();
     const users   = Store.getUsers();
+    const groups  = Store.getLeadGroups();
     const isEdit  = !!prefill.id;
     const stages  = LeadsView.STAGES;
     const sources = LeadsView.SOURCES;
-    const tagsStr = (prefill.tags || []).join(', ');
+    const currentGroupId = prefill.groupId || prefill.group_id || '';
 
     this.open(`
       <div class="modal-header">
@@ -408,7 +409,7 @@ const Modal = {
             <input class="form-input" id="l-name" placeholder="Juan Perez" value="${prefill.name||''}">
           </div>
           <div class="form-group" style="margin-bottom:0">
-            <label class="form-label">Empresa</label>
+            <label class="form-label">Empresa / Inmobiliaria</label>
             <input class="form-input" id="l-company" placeholder="Inmobiliaria XYZ" value="${prefill.company||''}">
           </div>
         </div>
@@ -421,6 +422,14 @@ const Modal = {
             <label class="form-label">Telefono</label>
             <input class="form-input" id="l-phone" value="${prefill.phone||''}">
           </div>
+        </div>
+        <div class="form-group" style="margin-top:16px">
+          <label class="form-label">Convenio / Grupo</label>
+          <select class="form-select" id="l-group">
+            <option value="">Sin convenio</option>
+            ${groups.map(g => `<option value="${g.id}" ${currentGroupId===g.id?'selected':''}>${g.name}</option>`).join('')}
+          </select>
+          ${groups.length === 0 ? `<div class="form-hint" style="margin-top:4px">Todavia no hay convenios. <a href="#/groups" style="color:var(--accent)">Crear convenio →</a></div>` : ''}
         </div>
         <div class="form-row" style="margin-top:16px">
           <div class="form-group" style="margin-bottom:0">
@@ -454,16 +463,6 @@ const Modal = {
         </div>
         <div class="form-row" style="margin-top:16px">
           <div class="form-group" style="margin-bottom:0">
-            <label class="form-label">Valor estimado (ARS)</label>
-            <input class="form-input" type="number" id="l-value" placeholder="50000" value="${prefill.estimated_value||prefill.estimatedValue||''}">
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label class="form-label">Probabilidad (%)</label>
-            <input class="form-input" type="number" min="0" max="100" id="l-prob" value="${prefill.probability != null ? prefill.probability : 20}">
-          </div>
-        </div>
-        <div class="form-row" style="margin-top:16px">
-          <div class="form-group" style="margin-bottom:0">
             <label class="form-label">Proxima accion (fecha)</label>
             <input class="form-input" type="date" id="l-next-date" value="${prefill.next_action_date||prefill.nextActionDate||''}">
           </div>
@@ -473,10 +472,6 @@ const Modal = {
           </div>
         </div>
         <div class="form-group" style="margin-top:16px">
-          <label class="form-label">Tags (separados por coma)</label>
-          <input class="form-input" id="l-tags" placeholder="hot, enterprise, agencia-chica" value="${tagsStr}">
-        </div>
-        <div class="form-group">
           <label class="form-label">Notas</label>
           <textarea class="form-textarea" id="l-notes" placeholder="Contexto, detalles, historia del lead...">${prefill.notes||''}</textarea>
         </div>
@@ -492,21 +487,18 @@ const Modal = {
       const name = document.getElementById('l-name').value.trim();
       if (!name) { Utils.toast('El nombre es obligatorio','error'); return; }
 
-      const tagsStr = document.getElementById('l-tags').value;
       const data = {
         name,
         company:         document.getElementById('l-company').value,
         email:           document.getElementById('l-email').value,
         phone:           document.getElementById('l-phone').value,
+        groupId:         document.getElementById('l-group').value || null,
         systemId:        document.getElementById('l-system').value || null,
         ownerId:         document.getElementById('l-owner').value || null,
         status:          document.getElementById('l-status').value,
         source:          document.getElementById('l-source').value,
-        estimatedValue:  parseFloat(document.getElementById('l-value').value) || 0,
-        probability:     parseInt(document.getElementById('l-prob').value) || 0,
         nextActionDate:  document.getElementById('l-next-date').value || null,
         nextAction:      document.getElementById('l-next-text').value,
-        tags:            tagsStr.split(',').map(t => t.trim()).filter(Boolean),
         notes:           document.getElementById('l-notes').value,
       };
 
@@ -515,6 +507,73 @@ const Modal = {
       this.close();
       if (isEdit) Panel.openLead(prefill.id);
     };
+  },
+
+  // ── Group modal (create/edit) ─────────────
+  openGroup(prefill = {}) {
+    const isEdit = !!prefill.id;
+    const colors = ['#0071E3','#28C76F','#BF5AF2','#FF9F0A','#FF3B30','#FF6B6B','#1AC8DB','#FF9500'];
+    this.open(`
+      <div class="modal-header">
+        <span class="modal-title">${isEdit?'Editar convenio':'Nuevo convenio'}</span>
+        <button class="modal-close" id="mc-close">${Utils.icon('close',14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Nombre del convenio *</label>
+          <input class="form-input" id="g-name" placeholder="Ej: Colegio Inmobiliario de Catamarca" value="${prefill.name||''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripcion</label>
+          <textarea class="form-textarea" id="g-desc" placeholder="Detalles del convenio, responsables externos, condiciones...">${prefill.description||''}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Color</label>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            ${colors.map(c => `<div class="color-pick" data-color="${c}" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:3px solid ${(prefill.color||'#0071E3')===c?'var(--text-1)':'transparent'};transition:border-color 0.15s"></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        ${isEdit ? `<button class="btn btn-ghost btn-sm" id="mc-delete" style="color:var(--red);margin-right:auto">Eliminar</button>` : ''}
+        <button class="btn btn-secondary btn-sm" id="mc-cancel">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="mc-save">${isEdit?'Guardar':'Crear convenio'}</button>
+      </div>`);
+
+    let selectedColor = prefill.color || '#0071E3';
+    document.querySelectorAll('.color-pick').forEach(el => {
+      el.onclick = () => {
+        selectedColor = el.dataset.color;
+        document.querySelectorAll('.color-pick').forEach(x => x.style.borderColor = 'transparent');
+        el.style.borderColor = 'var(--text-1)';
+      };
+    });
+
+    document.getElementById('mc-close').onclick  = () => this.close();
+    document.getElementById('mc-cancel').onclick = () => this.close();
+    document.getElementById('mc-save').onclick   = async () => {
+      const name = document.getElementById('g-name').value.trim();
+      if (!name) { Utils.toast('El nombre es obligatorio','error'); return; }
+      const data = {
+        name,
+        description: document.getElementById('g-desc').value,
+        color: selectedColor,
+      };
+      if (isEdit) { await Store.updateLeadGroup(prefill.id, data); Utils.toast('Convenio actualizado'); }
+      else        { await Store.createLeadGroup(data); Utils.toast('Convenio creado','success'); }
+      this.close();
+    };
+    const delBtn = document.getElementById('mc-delete');
+    if (delBtn) {
+      delBtn.onclick = async () => {
+        const stats = Store.getGroupStats(prefill.id);
+        if (!confirm(`Eliminar el convenio "${prefill.name}"? ${stats.total > 0 ? `Los ${stats.total} leads asociados quedan sin convenio (no se eliminan).` : ''}`)) return;
+        await Store.deleteLeadGroup(prefill.id);
+        Utils.toast('Convenio eliminado','success');
+        this.close();
+        if (window.location.hash.startsWith('#/groups/')) Router.navigate('/groups');
+      };
+    }
   },
 
   // ── Lead update (interaccion) ────────────
@@ -613,7 +672,7 @@ const Modal = {
     const lead = Store.getLeadById(leadId);
     this.open(`
       <div class="modal-header">
-        <span class="modal-title">🎉 Marcar como ganado</span>
+        <span class="modal-title">🎉 Marcar como cerrado</span>
         <button class="modal-close" id="mc-close">${Utils.icon('close',14)}</button>
       </div>
       <div class="modal-body">
@@ -622,22 +681,22 @@ const Modal = {
           <div style="font-size:12px;color:var(--green-text);opacity:0.8">${lead?.company||''}</div>
         </div>
         <div class="form-group">
-          <label class="form-label">Valor final del deal (ARS)</label>
-          <input class="form-input" type="number" id="won-value" value="${lead?.estimated_value||0}">
-          <div class="form-hint" style="margin-top:4px">Ajustalo si hubo negociacion en el precio final.</div>
+          <label class="form-label">Nota de cierre (opcional)</label>
+          <textarea class="form-textarea" id="won-note" placeholder="Como se concreto, que producto, detalles..." style="min-height:80px"></textarea>
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary btn-sm" id="mc-cancel">Cancelar</button>
-        <button class="btn btn-sm" id="mc-save" style="background:var(--green);color:white">Confirmar ganado</button>
+        <button class="btn btn-sm" id="mc-save" style="background:var(--green);color:white">Confirmar cierre</button>
       </div>`);
 
     document.getElementById('mc-close').onclick  = () => this.close();
     document.getElementById('mc-cancel').onclick = () => this.close();
     document.getElementById('mc-save').onclick   = async () => {
-      const value = parseFloat(document.getElementById('won-value').value) || 0;
-      await Store.updateLead(leadId, { status: 'won', estimatedValue: value, probability: 100 });
-      Utils.toast('¡Deal ganado! 🎉','success');
+      const note = document.getElementById('won-note').value.trim();
+      await Store.updateLead(leadId, { status: 'won' });
+      if (note) await Store.addLeadUpdate(leadId, 'note', 'Cierre: ' + note);
+      Utils.toast('¡Cerrado! 🎉','success');
       this.close();
       Panel.openLead(leadId);
     };
@@ -859,20 +918,20 @@ const Panel = {
 
     const owner   = lead.owner_id  ? Store.getUserById(lead.owner_id)  : null;
     const system  = lead.system_id ? Store.getSystemById(lead.system_id) : null;
+    const group   = lead.group_id  ? Store.getLeadGroupById(lead.group_id) : null;
     const creator = lead.created_by ? Store.getUserById(lead.created_by) : null;
     const updates = Store.getLeadUpdates(leadId);
     const stage   = LeadsView.STAGES.find(s => s.id === lead.status);
     const sourceLabel = (LeadsView.SOURCES.find(s => s.id === lead.source) || { label: lead.source }).label;
     const today = new Date().toISOString().split('T')[0];
     const overdue = lead.next_action_date && lead.next_action_date < today && !['won','lost'].includes(lead.status);
-    const weightedValue = Math.round(Number(lead.estimated_value || 0) * (lead.probability || 0) / 100);
 
     const updateIcon = {
       call:'📞', meeting:'🤝', email:'✉️', demo:'🖥️', proposal:'📄', note:'📝', status_change:'🔄',
     };
 
     // Suggest next stage
-    const stageOrder = ['new','contacted','demo','proposal','negotiation','won'];
+    const stageOrder = ['new','contacted','interested','won'];
     const currentIdx = stageOrder.indexOf(lead.status);
     const nextStageId = currentIdx >= 0 && currentIdx < stageOrder.length - 1 ? stageOrder[currentIdx + 1] : null;
     const nextStageLabel = nextStageId ? Store.leadStatusLabel(nextStageId) : null;
@@ -882,7 +941,7 @@ const Panel = {
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
             ${stage ? `<span class="badge" style="background:${stage.color}20;color:${stage.color};font-weight:600">${stage.label}</span>` : ''}
-            ${(lead.tags||[]).map(t => `<span class="badge badge-medium" style="font-size:10.5px">${t}</span>`).join('')}
+            ${group ? `<span class="badge" style="background:${group.color}20;color:${group.color};font-size:11px">${group.name}</span>` : ''}
           </div>
           <h3 style="font-size:15px;font-weight:600;line-height:1.35">${lead.name}</h3>
           ${lead.company ? `<div style="font-size:12.5px;color:var(--text-3);margin-top:2px">${lead.company}</div>` : ''}
@@ -913,30 +972,18 @@ const Panel = {
           </div>
         </div>
 
-        <!-- Oportunidad -->
+        <!-- Responsable y origen -->
         <div class="panel-section">
-          <div class="panel-section-title">Oportunidad</div>
+          <div class="panel-section-title">Datos</div>
+          ${group ? `
+          <div class="detail-row">
+            <span class="detail-label">Convenio</span>
+            <div class="detail-value"><span class="badge" style="background:${group.color}20;color:${group.color}">${group.name}</span></div>
+          </div>` : ''}
           <div class="detail-row">
             <span class="detail-label">Sistema</span>
             <div class="detail-value">${system ? `<div style="display:flex;align-items:center;gap:6px"><div style="width:7px;height:7px;border-radius:50%;background:${system.color}"></div><span>${system.name}</span></div>` : '<span style="color:var(--text-4)">—</span>'}</div>
           </div>
-          <div class="detail-row">
-            <span class="detail-label">Valor</span>
-            <span class="detail-value" style="font-weight:600">${Number(lead.estimated_value) > 0 ? Utils.formatCurrency(lead.estimated_value) : '—'}</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Probabilidad</span>
-            <span class="detail-value">${lead.probability}%</span>
-          </div>
-          <div class="detail-row">
-            <span class="detail-label">Valor ponderado</span>
-            <span class="detail-value" style="color:var(--accent);font-weight:600">${Utils.formatCurrency(weightedValue)}</span>
-          </div>
-        </div>
-
-        <!-- Responsable y origen -->
-        <div class="panel-section">
-          <div class="panel-section-title">Asignacion</div>
           <div class="detail-row">
             <span class="detail-label">Responsable</span>
             <div class="detail-value" style="display:flex;align-items:center;gap:7px">
@@ -1000,7 +1047,7 @@ const Panel = {
           <div class="panel-section-title">Acciones</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${nextStageId ? `<button class="btn btn-primary btn-xs" data-lead-stage="${nextStageId}">→ ${nextStageLabel}</button>` : ''}
-            ${!['won','lost'].includes(lead.status) ? `<button class="btn btn-xs" style="background:var(--green);color:white" data-lead-won="${lead.id}">🎉 Ganado</button>` : ''}
+            ${!['won','lost'].includes(lead.status) ? `<button class="btn btn-xs" style="background:var(--green);color:white" data-lead-won="${lead.id}">🎉 Cerrar</button>` : ''}
             ${!['won','lost'].includes(lead.status) ? `<button class="btn btn-xs" style="background:var(--red-bg);color:var(--red-text)" data-lead-lost="${lead.id}">Perdido</button>` : ''}
             <button class="btn btn-secondary btn-xs" data-edit-lead="${lead.id}">${Utils.icon('edit',12)} Editar</button>
             <button class="btn btn-ghost btn-xs" data-delete-lead="${lead.id}" style="color:var(--text-3)">Eliminar</button>
@@ -1012,7 +1059,7 @@ const Panel = {
 
     const cont = document.getElementById('panel-container');
     cont.querySelectorAll('[data-add-update]').forEach(el => {
-      el.onclick = () => Modal.openLeadUpdate(el.dataset.addUpdate);
+      el.onclick = () => Modal.openLeadUpdate(el.dataset.addUpdate || leadId);
     });
     cont.querySelectorAll('[data-lead-stage]').forEach(el => {
       el.onclick = async () => {

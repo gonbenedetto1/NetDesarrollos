@@ -159,32 +159,49 @@ const HelpView = {
         </div>
       </div>
 
+      <!-- Convenios -->
+      <div class="card" style="margin-bottom:16px;border-left:4px solid var(--orange)">
+        <h3 style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--orange-bg);color:var(--orange-text);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">5</span>
+          Convenios: agrupar leads por acuerdo
+        </h3>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:14px">
+          Los <strong>convenios</strong> son los acuerdos/partnerships por los que llegan los leads. Por ejemplo: "Colegio Inmobiliario de Catamarca" es un convenio, y dentro tenes a todas las inmobiliarias de ese colegio como leads.
+        </p>
+        <div style="background:var(--bg-input);border-radius:var(--r-md);padding:12px;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:6px">Como se usa:</div>
+          <ul style="font-size:12px;color:var(--text-2);line-height:1.6;padding-left:16px;margin:0">
+            <li><strong>Crear un convenio</strong> — desde "Convenios" en el sidebar, boton "Nuevo convenio". Pone nombre, descripcion y color.</li>
+            <li><strong>Asignar leads</strong> — al crear o editar un lead, elegi el convenio correspondiente.</li>
+            <li><strong>Ver el estado de un convenio</strong> — click en el convenio para ver todos sus leads en kanban, con sus etapas y acciones.</li>
+            <li><strong>Reporte semanal</strong> — en "Reportes" aparece una seccion con la actividad por convenio de la semana.</li>
+          </ul>
+        </div>
+      </div>
+
       <!-- Leads / CRM -->
       <div class="card" style="margin-bottom:16px;border-left:4px solid var(--accent)">
         <h3 style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
-          <span style="width:28px;height:28px;border-radius:50%;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">5</span>
-          Como usar el panel de Leads (CRM)
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">6</span>
+          Como gestionar Leads
         </h3>
         <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:14px">
-          Cada posible cliente es un <strong>lead</strong>. Se carga una sola vez y todo el equipo ve el estado actual — sin tener que preguntar.
+          Cada posible cliente es un <strong>lead</strong>. Se carga una sola vez, se asigna a un convenio y a un responsable, y todo el equipo ve el estado actual sin tener que preguntar.
         </p>
 
-        <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:8px">Las 7 etapas del pipeline:</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:8px">Las 5 etapas:</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
           ${[
-            ['Nuevo','10%','#AEAEB2','Recien identificado'],
-            ['Contactado','25%','#0071E3','Ya hablamos'],
-            ['Demo agendada','45%','#5AC8FA','Demo programada'],
-            ['Propuesta enviada','65%','#BF5AF2','Cotizacion enviada'],
-            ['Negociacion','80%','#FF9F0A','Revisando terminos'],
-            ['Ganado','100%','#28C76F','Firmo ✓'],
-            ['Perdido','0%','#FF3B30','No se concreto'],
-          ].map(([name, prob, color, desc]) => `
+            ['Nuevo','#AEAEB2','Recien cargado'],
+            ['Contactado','#0071E3','Primer contacto hecho'],
+            ['Interesado','#FF9F0A','Mostro interes real, en seguimiento'],
+            ['Cerrado','#28C76F','Se convirtio en cliente'],
+            ['Perdido','#FF3B30','No se concreto'],
+          ].map(([name, color, desc]) => `
             <div style="padding:8px 10px;background:${color}15;border:1px solid ${color}40;border-radius:var(--r-md)">
               <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
                 <div style="width:7px;height:7px;border-radius:50%;background:${color}"></div>
                 <span style="font-size:12px;font-weight:600;color:var(--text-1)">${name}</span>
-                <span style="font-size:10.5px;color:var(--text-3);margin-left:auto">${prob}</span>
               </div>
               <div style="font-size:10.5px;color:var(--text-3)">${desc}</div>
             </div>`).join('')}
@@ -192,33 +209,35 @@ const HelpView = {
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
           <div style="background:var(--bg-input);border-radius:var(--r-md);padding:12px">
-            <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:6px">Cuando registrar una interaccion:</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:6px">Siempre registrar una interaccion cuando:</div>
             <ul style="font-size:12px;color:var(--text-2);line-height:1.5;padding-left:16px;margin:0">
-              <li>Despues de una llamada</li>
-              <li>Despues de una reunion o demo</li>
-              <li>Cuando mandas un email importante</li>
-              <li>Cuando recibis info relevante del lead</li>
+              <li>Llamaste al lead</li>
+              <li>Tuviste una reunion</li>
+              <li>Mandaste un email importante</li>
+              <li>Hiciste una demo del producto</li>
+              <li>Mandaste una propuesta / cotizacion</li>
+              <li>Recibiste info relevante</li>
             </ul>
           </div>
           <div style="background:var(--bg-input);border-radius:var(--r-md);padding:12px">
             <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:6px">Cuando mover de etapa:</div>
             <ul style="font-size:12px;color:var(--text-2);line-height:1.5;padding-left:16px;margin:0">
-              <li>Contactado: tras la primera comunicacion</li>
-              <li>Demo: al agendar la demo</li>
-              <li>Propuesta: al enviar cotizacion</li>
-              <li>Negociacion: cuando empiezan a pedir ajustes</li>
-              <li>Ganado/Perdido: al cierre del deal</li>
+              <li><strong>Contactado</strong>: despues de la primera comunicacion exitosa</li>
+              <li><strong>Interesado</strong>: mostro interes real, seguimiento activo</li>
+              <li><strong>Cerrado</strong>: firmo / es cliente</li>
+              <li><strong>Perdido</strong>: no hay oportunidad, con razon</li>
             </ul>
           </div>
         </div>
 
         <div style="background:var(--accent-bg);border-radius:var(--r-md);padding:12px">
-          <div style="font-size:12px;font-weight:600;color:var(--accent-text);margin-bottom:4px">💡 Buenas practicas:</div>
+          <div style="font-size:12px;font-weight:600;color:var(--accent-text);margin-bottom:4px">💡 Para que el reporte semanal sea util:</div>
           <div style="font-size:12px;color:var(--accent-text);line-height:1.5">
+            • <strong>Cada lead nuevo se carga inmediatamente</strong> en el sistema con su convenio<br>
+            • <strong>Despues de cada accion</strong> (llamada, reunion, etc) se registra la interaccion con una nota clara<br>
             • <strong>Siempre cargar "proxima accion"</strong> con fecha — si esta vencida, aparece en rojo<br>
-            • <strong>Usar tags</strong> para segmentar (ej: "hot", "enterprise", "agencia-chica")<br>
-            • <strong>Valor y probabilidad</strong> ayudan a proyectar el pipeline — cargalos siempre<br>
-            • <strong>Al perder</strong>, carga la razon — eso nos ayuda a mejorar como equipo
+            • <strong>Al cerrar o perder</strong>, cambiar la etapa para que los reportes reflejen la realidad<br>
+            • <strong>Al perder</strong>, cargar la razon — eso nos ayuda a mejorar como equipo
           </div>
         </div>
       </div>

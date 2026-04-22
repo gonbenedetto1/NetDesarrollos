@@ -18,6 +18,7 @@ const Store = (() => {
     budgets:       [],
     leads:         [],
     leadUpdates:   {},  // { leadId: [updates] }
+    leadGroups:    [],
   };
   let currentUser = null; // { id, name, initials, role, color, bg, email }
 
@@ -34,7 +35,7 @@ const Store = (() => {
   //  LOAD — fetch everything from Supabase into cache
   // ══════════════════════════════════════════════════════
   async function loadFromSupabase() {
-    const [profiles, systems, tasks, blocks, comments, activity, budgets, notifs, leads, leadUpdates] = await Promise.all([
+    const [profiles, systems, tasks, blocks, comments, activity, budgets, notifs, leads, leadUpdates, leadGroups] = await Promise.all([
       sb.from('profiles').select('*'),
       sb.from('systems').select('*').order('created_at'),
       sb.from('tasks').select('*').order('created_at'),
@@ -45,6 +46,7 @@ const Store = (() => {
       sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(50),
       sb.from('leads').select('*').order('created_at', { ascending: false }),
       sb.from('lead_updates').select('*').order('created_at', { ascending: false }),
+      sb.from('lead_groups').select('*').order('created_at', { ascending: false }),
     ]);
 
     state.users    = profiles.data || [];
@@ -55,6 +57,7 @@ const Store = (() => {
     state.budgets  = budgets.data  || [];
     state.notifications = notifs.data || [];
     state.leads    = leads.data    || [];
+    state.leadGroups = leadGroups.data || [];
 
     // Group comments by task_id
     state.comments = {};
@@ -85,6 +88,7 @@ const Store = (() => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets' }, () => refreshTable('budgets'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => refreshTable('leads'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_updates' }, () => refreshTable('lead_updates'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_groups' }, () => refreshTable('lead_groups'))
       .subscribe();
   }
 
@@ -113,6 +117,11 @@ const Store = (() => {
       state.leads = data || [];
       _addCompatToAll();
       emit('leads:changed');
+    } else if (table === 'lead_groups') {
+      const { data } = await sb.from('lead_groups').select('*').order('created_at', { ascending: false });
+      state.leadGroups = data || [];
+      _addCompatToAll();
+      emit('lead_groups:changed');
     } else if (table === 'lead_updates') {
       const { data } = await sb.from('lead_updates').select('*').order('created_at', { ascending: false });
       state.leadUpdates = {};
@@ -509,8 +518,8 @@ const Store = (() => {
     try {
       Object.defineProperties(l, {
         systemId:        { get() { return this.system_id; },        enumerable: false, configurable: true },
+        groupId:         { get() { return this.group_id; },         enumerable: false, configurable: true },
         ownerId:         { get() { return this.owner_id; },         enumerable: false, configurable: true },
-        estimatedValue:  { get() { return this.estimated_value; },  enumerable: false, configurable: true },
         nextActionDate:  { get() { return this.next_action_date; }, enumerable: false, configurable: true },
         nextAction:      { get() { return this.next_action; },      enumerable: false, configurable: true },
         lostReason:      { get() { return this.lost_reason; },      enumerable: false, configurable: true },
@@ -538,25 +547,71 @@ const Store = (() => {
   }
 
   // ══════════════════════════════════════════════════════
+  //  LEAD GROUPS (convenios)
+  // ══════════════════════════════════════════════════════
+  function getLeadGroups() { return state.leadGroups; }
+  function getLeadGroupById(id) { return state.leadGroups.find(g => g.id === id); }
+
+  async function createLeadGroup(data) {
+    const row = {
+      name:        data.name,
+      description: data.description || '',
+      color:       data.color || '#0071E3',
+      created_by:  currentUser?.id,
+    };
+    const { data: g, error } = await sb.from('lead_groups').insert(row).select().single();
+    if (error) { Utils.toast('Error al crear convenio: ' + error.message, 'error'); return null; }
+    state.leadGroups.unshift(g);
+    emit('lead_groups:changed');
+    return g;
+  }
+
+  async function updateLeadGroup(id, data) {
+    const { data: g, error } = await sb.from('lead_groups').update(data).eq('id', id).select().single();
+    if (error) { Utils.toast('Error al actualizar: ' + error.message, 'error'); return; }
+    const i = state.leadGroups.findIndex(x => x.id === id);
+    if (i >= 0) state.leadGroups[i] = g;
+    emit('lead_groups:changed');
+    return g;
+  }
+
+  async function deleteLeadGroup(id) {
+    const { error } = await sb.from('lead_groups').delete().eq('id', id);
+    if (error) { Utils.toast('Error al eliminar: ' + error.message, 'error'); return; }
+    state.leadGroups = state.leadGroups.filter(g => g.id !== id);
+    emit('lead_groups:changed');
+    emit('leads:changed'); // leads referencing this group get group_id = null
+  }
+
+  function getGroupStats(groupId) {
+    const leads = state.leads.filter(l => l.group_id === groupId);
+    return {
+      total:  leads.length,
+      open:   leads.filter(l => !['won','lost'].includes(l.status)).length,
+      won:    leads.filter(l => l.status === 'won').length,
+      lost:   leads.filter(l => l.status === 'lost').length,
+      new:    leads.filter(l => l.status === 'new').length,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════
   //  LEADS
   // ══════════════════════════════════════════════════════
-  const LEAD_STATUS_DEFAULT_PROB = {
-    new: 10, contacted: 25, demo: 45, proposal: 65, negotiation: 80, won: 100, lost: 0,
-  };
+  const LEAD_STAGES = ['new','contacted','interested','won','lost'];
 
   function getLeads(filter = {}) {
     let leads = state.leads;
     if (filter.status)   leads = leads.filter(l => l.status === filter.status);
     if (filter.ownerId)  leads = leads.filter(l => l.owner_id === filter.ownerId);
     if (filter.systemId) leads = leads.filter(l => l.system_id === filter.systemId);
+    if (filter.groupId)  leads = leads.filter(l => l.group_id === filter.groupId);
     if (filter.source)   leads = leads.filter(l => l.source === filter.source);
     if (filter.search) {
       const q = filter.search.toLowerCase();
       leads = leads.filter(l =>
         (l.name || '').toLowerCase().includes(q) ||
         (l.company || '').toLowerCase().includes(q) ||
-        (l.email || '').toLowerCase().includes(q) ||
-        (l.tags || []).some(t => t.toLowerCase().includes(q))
+        (l.email || '').toLowerCase().includes(q)
       );
     }
     return leads;
@@ -567,21 +622,19 @@ const Store = (() => {
 
   async function createLead(data) {
     const row = {
-      name:            data.name,
-      company:         data.company || '',
-      email:           data.email || '',
-      phone:           data.phone || '',
-      status:          data.status || 'new',
-      source:          data.source || 'other',
-      system_id:       data.systemId || null,
-      owner_id:        data.ownerId || null,
-      estimated_value: data.estimatedValue || 0,
-      probability:     data.probability != null ? data.probability : (LEAD_STATUS_DEFAULT_PROB[data.status || 'new']),
+      name:             data.name,
+      company:          data.company || '',
+      email:            data.email || '',
+      phone:            data.phone || '',
+      status:           data.status || 'new',
+      source:           data.source || 'other',
+      system_id:        data.systemId || null,
+      group_id:         data.groupId || null,
+      owner_id:         data.ownerId || null,
       next_action_date: data.nextActionDate || null,
-      next_action:     data.nextAction || '',
-      tags:            data.tags || [],
-      notes:           data.notes || '',
-      created_by:      currentUser?.id,
+      next_action:      data.nextAction || '',
+      notes:            data.notes || '',
+      created_by:       currentUser?.id,
     };
     const { data: l, error } = await sb.from('leads').insert(row).select().single();
     if (error) { Utils.toast('Error al crear lead: ' + error.message, 'error'); return null; }
@@ -605,7 +658,7 @@ const Store = (() => {
     if (!old) return;
     const payload = { updated_at: new Date().toISOString() };
     const keyMap = {
-      systemId: 'system_id', ownerId: 'owner_id', estimatedValue: 'estimated_value',
+      systemId: 'system_id', groupId: 'group_id', ownerId: 'owner_id',
       nextActionDate: 'next_action_date', nextAction: 'next_action', lostReason: 'lost_reason',
     };
     Object.keys(data).forEach(k => {
@@ -618,10 +671,6 @@ const Store = (() => {
     if (statusChanged) {
       if (data.status === 'won')  payload.won_at  = new Date().toISOString();
       if (data.status === 'lost') payload.lost_at = new Date().toISOString();
-      // Auto-bump probability to default for the new stage unless explicitly set
-      if (data.probability === undefined) {
-        payload.probability = LEAD_STATUS_DEFAULT_PROB[data.status];
-      }
     }
 
     const { data: l, error } = await sb.from('leads').update(payload).eq('id', id).select().single();
@@ -633,7 +682,7 @@ const Store = (() => {
 
     // Log status change as an update entry
     if (statusChanged) {
-      const text = data.status === 'won' ? `marco como GANADO`
+      const text = data.status === 'won' ? `marco como CERRADO ✓`
                  : data.status === 'lost' ? `marco como PERDIDO${data.lostReason ? ' — ' + data.lostReason : ''}`
                  : `movio a etapa "${_leadStatusLabel(data.status)}"`;
       await _addLeadUpdateInternal(id, currentUser?.id, 'status_change', text);
@@ -674,55 +723,89 @@ const Store = (() => {
   }
 
   function _leadStatusLabel(s) {
-    return { new:'Nuevo', contacted:'Contactado', demo:'Demo agendada', proposal:'Propuesta enviada', negotiation:'Negociacion', won:'Ganado', lost:'Perdido' }[s] || s;
+    return { new:'Nuevo', contacted:'Contactado', interested:'Interesado / En seguimiento', won:'Cerrado', lost:'Perdido' }[s] || s;
+  }
+
+  function _weekStart() {
+    // ISO week — Monday
+    const d = new Date();
+    const day = d.getDay(); // 0 (Sun) .. 6 (Sat)
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(d.setDate(diff));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
   }
 
   function getLeadKPIs() {
     const open = state.leads.filter(l => !['won','lost'].includes(l.status));
     const won = state.leads.filter(l => l.status === 'won');
     const lost = state.leads.filter(l => l.status === 'lost');
-    const pipelineTotal = open.reduce((s, l) => s + Number(l.estimated_value || 0), 0);
-    const weighted = open.reduce((s, l) => s + Number(l.estimated_value || 0) * (l.probability || 0) / 100, 0);
 
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-    const wonThisMonth = won.filter(l => l.won_at && l.won_at >= monthStart);
-    const newThisMonth = state.leads.filter(l => l.created_at >= monthStart);
+    const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const weekStartIso = _weekStart().toISOString();
+
+    const wonThisMonth  = won.filter(l => l.won_at && l.won_at >= monthStartIso);
+    const wonThisWeek   = won.filter(l => l.won_at && l.won_at >= weekStartIso);
+    const lostThisWeek  = lost.filter(l => l.lost_at && l.lost_at >= weekStartIso);
+    const newThisWeek   = state.leads.filter(l => l.created_at >= weekStartIso);
+    const newThisMonth  = state.leads.filter(l => l.created_at >= monthStartIso);
+
+    // Actions (updates) this week
+    const allUpdates = Object.values(state.leadUpdates).flat();
+    const actionsThisWeek = allUpdates.filter(u => u.created_at >= weekStartIso && u.type !== 'status_change');
 
     const conversionRate = (won.length + lost.length) > 0
       ? Math.round(won.length / (won.length + lost.length) * 100) : 0;
 
-    // Avg time to close (won leads)
-    const closeTimes = won.filter(l => l.created_at && l.won_at).map(l =>
-      (new Date(l.won_at) - new Date(l.created_at)) / 86400000);
-    const avgCloseDays = closeTimes.length > 0
-      ? Math.round(closeTimes.reduce((s, d) => s + d, 0) / closeTimes.length) : 0;
-
     return {
-      pipelineTotal, weighted,
       openCount: open.length,
-      wonThisMonth: wonThisMonth.reduce((s, l) => s + Number(l.estimated_value || 0), 0),
-      wonThisMonthCount: wonThisMonth.length,
-      newThisMonthCount: newThisMonth.length,
-      conversionRate,
-      avgCloseDays,
       totalLeads: state.leads.length,
       wonCount: won.length,
       lostCount: lost.length,
+      wonThisMonthCount: wonThisMonth.length,
+      wonThisWeekCount: wonThisWeek.length,
+      lostThisWeekCount: lostThisWeek.length,
+      newThisMonthCount: newThisMonth.length,
+      newThisWeekCount: newThisWeek.length,
+      actionsThisWeekCount: actionsThisWeek.length,
+      conversionRate,
     };
   }
 
   function getLeadFunnel() {
-    const stages = ['new','contacted','demo','proposal','negotiation','won','lost'];
-    return stages.map(s => {
+    return LEAD_STAGES.map(s => {
       const leads = state.leads.filter(l => l.status === s);
       return {
         status: s,
         label: _leadStatusLabel(s),
         count: leads.length,
-        value: leads.reduce((sum, l) => sum + Number(l.estimated_value || 0), 0),
       };
     });
+  }
+
+  function getWeeklyReport() {
+    const weekStartIso = _weekStart().toISOString();
+    const allUpdates = Object.values(state.leadUpdates).flat();
+    const updates = allUpdates.filter(u => u.created_at >= weekStartIso);
+
+    // Por tipo
+    const byType = {};
+    updates.forEach(u => { byType[u.type] = (byType[u.type] || 0) + 1; });
+
+    // Por usuario
+    const byUser = {};
+    updates.forEach(u => { byUser[u.user_id] = (byUser[u.user_id] || 0) + 1; });
+
+    // Por grupo (via lead)
+    const byGroup = {};
+    updates.forEach(u => {
+      const lead = state.leads.find(l => l.id === u.lead_id);
+      const gid = lead?.group_id || 'none';
+      byGroup[gid] = (byGroup[gid] || 0) + 1;
+    });
+
+    return { updates, byType, byUser, byGroup, weekStart: _weekStart() };
   }
 
   function getLeadsWithOverdueFollowup() {
@@ -765,8 +848,10 @@ const Store = (() => {
     getMarketingBudgets, updateMarketingBudget,
     // Leads
     getLeads, getLeadById, getLeadUpdates, createLead, updateLead, deleteLead, addLeadUpdate,
-    getLeadKPIs, getLeadFunnel, getLeadsWithOverdueFollowup,
+    getLeadKPIs, getLeadFunnel, getLeadsWithOverdueFollowup, getWeeklyReport,
     leadStatusLabel: _leadStatusLabel,
+    // Lead groups (convenios)
+    getLeadGroups, getLeadGroupById, createLeadGroup, updateLeadGroup, deleteLeadGroup, getGroupStats,
     // Users
     getUsers() { return state.users; },
     getUserById(id) { return state.users.find(u => u.id === id); },

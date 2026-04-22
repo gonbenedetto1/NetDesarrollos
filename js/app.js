@@ -20,6 +20,13 @@ const Router = {
       return;
     }
 
+    // Groups detail: /groups/:id  (shows leads of that convenio)
+    if (parts[0] === 'groups' && parts[1]) {
+      GroupsView.renderDetail(parts[1]);
+      Sidebar.setActive('/groups');
+      return;
+    }
+
     // Notifications as nav item
     if (parts[0] === 'notifications') {
       Notifications.openPanel();
@@ -33,6 +40,7 @@ const Router = {
       '/systems':       () => { SystemsView.renderList(); Sidebar.setActive('/systems'); },
       '/tasks':         () => { TasksView.render();       Sidebar.setActive('/tasks'); },
       '/leads':         () => { LeadsView.render();       Sidebar.setActive('/leads'); },
+      '/groups':        () => { GroupsView.render();      Sidebar.setActive('/groups'); },
       '/blocks':        () => { BlocksView.render();      Sidebar.setActive('/blocks'); },
       '/calendar':      () => { CalendarView.render();    Sidebar.setActive('/calendar'); },
       '/reports':       () => { ReportsView.render();     Sidebar.setActive('/reports'); },
@@ -81,6 +89,7 @@ const App = {
     Store.on('blocks:changed',        () => { Sidebar.render(); Notifications.render(); });
     Store.on('systems:changed',       () => Sidebar.render());
     Store.on('leads:changed',         () => Sidebar.render());
+    Store.on('lead_groups:changed',   () => Sidebar.render());
     Store.on('notifications:changed', () => Notifications.render());
     Store.on('activity:changed',      () => {});
 
