@@ -11,7 +11,7 @@ const LeadsView = {
   lockedGroup: null,       // si se abre desde /groups/:id, filtra fijo
 
   STAGES: [
-    { id:'new',        label:'Nuevo',                 color:'#AEAEB2' },
+    { id:'new',        label:'Nuevo',                 color:'#5AC8FA' },
     { id:'contacted',  label:'Contactado',            color:'#0071E3' },
     { id:'interested', label:'Interesado / Seguimiento', color:'#FF9F0A' },
     { id:'won',        label:'Cerrado',               color:'#28C76F' },

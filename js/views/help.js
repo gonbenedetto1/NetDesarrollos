@@ -192,7 +192,7 @@ const HelpView = {
         <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:8px">Las 5 etapas:</div>
         <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
           ${[
-            ['Nuevo','#AEAEB2','Recien cargado'],
+            ['Nuevo','#5AC8FA','Recien cargado'],
             ['Contactado','#0071E3','Primer contacto hecho'],
             ['Interesado','#FF9F0A','Mostro interes real, en seguimiento'],
             ['Cerrado','#28C76F','Se convirtio en cliente'],

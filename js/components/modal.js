@@ -1023,14 +1023,14 @@ const Panel = {
           <div style="padding:10px 12px;background:var(--red-bg);border-radius:var(--r-md);font-size:13px;color:var(--red-text)">${lead.lost_reason}</div>
         </div>` : ''}
 
-        <!-- Timeline de interacciones -->
+        <!-- Timeline de interacciones (excluye comentarios internos) -->
         <div class="panel-section">
           <div class="panel-section-title" style="display:flex;justify-content:space-between;align-items:center">
-            <span>Interacciones (${updates.length})</span>
+            <span>Interacciones (${updates.filter(u => u.type !== 'comment').length})</span>
             <button class="btn btn-primary btn-xs" data-add-update="${lead.id}">${Utils.icon('plus',12)} Agregar</button>
           </div>
-          ${updates.length === 0 ? '<p style="font-size:13px;color:var(--text-4)">Aun no hay interacciones. Agregá la primera para llevar registro.</p>' :
-            `<div style="display:flex;flex-direction:column;gap:10px">${updates.map(u => {
+          ${updates.filter(u => u.type !== 'comment').length === 0 ? '<p style="font-size:13px;color:var(--text-4)">Aun no hay interacciones. Agregá la primera para llevar registro.</p>' :
+            `<div style="display:flex;flex-direction:column;gap:10px">${updates.filter(u => u.type !== 'comment').map(u => {
               const usr = Store.getUserById(u.user_id);
               return `<div style="display:flex;gap:10px;padding:10px;background:var(--bg-input);border-radius:var(--r-md)">
                 <div style="font-size:18px;flex-shrink:0;line-height:1">${updateIcon[u.type]||'•'}</div>
@@ -1051,6 +1051,30 @@ const Panel = {
             ${!['won','lost'].includes(lead.status) ? `<button class="btn btn-xs" style="background:var(--red-bg);color:var(--red-text)" data-lead-lost="${lead.id}">Perdido</button>` : ''}
             <button class="btn btn-secondary btn-xs" data-edit-lead="${lead.id}">${Utils.icon('edit',12)} Editar</button>
             <button class="btn btn-ghost btn-xs" data-delete-lead="${lead.id}" style="color:var(--text-3)">Eliminar</button>
+          </div>
+        </div>
+
+        <!-- Comentarios internos del equipo -->
+        <div class="panel-section">
+          <div class="panel-section-title">Comentarios internos (${updates.filter(u => u.type === 'comment').length})</div>
+          ${updates.filter(u => u.type === 'comment').length === 0 ? '<p style="font-size:13px;color:var(--text-4);margin-bottom:12px">Sin comentarios. Agrega uno para coordinar con el equipo (usá @Nombre para mencionar).</p>' :
+            `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">${updates.filter(u => u.type === 'comment').map(u => {
+              const usr = Store.getUserById(u.user_id);
+              return `<div class="comment-item">
+                ${usr ? Utils.avatarHtml(usr,'sm') : ''}
+                <div class="comment-body">
+                  <div>
+                    <span class="comment-author">${usr ? usr.name.split(' ')[0] : '?'}</span>
+                    <span class="comment-date">${Utils.timeAgo(u.created_at)}</span>
+                  </div>
+                  <div class="comment-text">${u.text.replace(/@([A-ZÁÉÍÓÚa-záéíóú]+)/g,'<strong style="color:var(--accent)">@$1</strong>')}</div>
+                </div>
+              </div>`;
+            }).join('')}</div>`}
+          <div class="comment-input-row">
+            ${Utils.avatarHtml(Store.getCurrentUser(),'sm')}
+            <input class="form-input" id="lead-comment-input" placeholder="Escribí un comentario... (@Nombre para mencionar)" style="flex:1">
+            <button class="btn btn-primary btn-xs" id="lead-comment-send">${Utils.icon('send',13)}</button>
           </div>
         </div>
       </div>`);
@@ -1084,6 +1108,21 @@ const Panel = {
         Panel.close();
       };
     });
+
+    // Comentarios internos
+    const commentSend = document.getElementById('lead-comment-send');
+    const commentInput = document.getElementById('lead-comment-input');
+    if (commentSend && commentInput) {
+      const sendComment = async () => {
+        const text = commentInput.value.trim();
+        if (!text) return;
+        commentInput.value = '';
+        await Store.addLeadUpdate(leadId, 'comment', text);
+        Panel.openLead(leadId);
+      };
+      commentSend.onclick = sendComment;
+      commentInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendComment(); } };
+    }
   },
 };
 
