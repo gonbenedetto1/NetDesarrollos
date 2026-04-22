@@ -128,7 +128,7 @@ const SystemsView = {
                 <input type="checkbox" class="member-check" value="${u.id}" ${isMember ? 'checked' : ''} style="accent-color:var(--accent);width:16px;height:16px">
                 ${Utils.avatarHtml(u,'sm')}
                 <span style="font-size:13px;color:var(--text-1)">${u.name}</span>
-                <span style="font-size:11px;color:var(--text-4);margin-left:auto">${{lead:'Director',marketing:'Marketing',developer:'Desarrollo',gvamax:'Enc. GVAMax'}[u.role]||u.role}</span>
+                <span style="font-size:11px;color:var(--text-4);margin-left:auto">${{lead:'Director',marketing:'Marketing',developer:'Desarrollo',gvamax:'Enc. GVAMax',convenios:'Enc. Convenios'}[u.role]||u.role}</span>
               </label>`;
             }).join('')}
             <div style="display:flex;gap:8px;margin-top:8px">

@@ -75,7 +75,7 @@ const Sidebar = {
           ${Utils.avatarHtml(user, 'md')}
           <div class="sidebar-user-info">
             <div class="sidebar-user-name">${user.name}</div>
-            <div class="sidebar-user-role">${{lead:'Director',marketing:'Marketing',developer:'Desarrollo',gvamax:'Encargado GVAMax'}[user.role]||user.role}</div>
+            <div class="sidebar-user-role">${{lead:'Director',marketing:'Marketing',developer:'Desarrollo',gvamax:'Encargado GVAMax',convenios:'Encargada Convenios'}[user.role]||user.role}</div>
           </div>
           <button class="btn btn-ghost btn-icon btn-sm" id="logout-btn" title="Cerrar sesión">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
