@@ -503,7 +503,7 @@ const Modal = {
       };
 
       if (isEdit) { await Store.updateLead(prefill.id, data); Utils.toast('Lead actualizado'); }
-      else        { await Store.createLead(data); Utils.toast('Lead creado','success'); }
+      else        { const res = await Store.createLead(data); if (!res) return; Utils.toast('Lead creado','success'); }
       this.close();
       if (isEdit) Panel.openLead(prefill.id);
     };
@@ -560,7 +560,7 @@ const Modal = {
         color: selectedColor,
       };
       if (isEdit) { await Store.updateLeadGroup(prefill.id, data); Utils.toast('Convenio actualizado'); }
-      else        { await Store.createLeadGroup(data); Utils.toast('Convenio creado','success'); }
+      else        { const res = await Store.createLeadGroup(data); if (!res) return; Utils.toast('Convenio creado','success'); }
       this.close();
     };
     const delBtn = document.getElementById('mc-delete');
