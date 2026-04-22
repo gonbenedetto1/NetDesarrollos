@@ -175,7 +175,7 @@ const LeadsView = {
     const overdue = lead.next_action_date && lead.next_action_date < new Date().toISOString().split('T')[0] && !['won','lost'].includes(lead.status);
 
     return `
-      <div class="kanban-card ${overdue ? 'blocked' : ''}" data-open-lead="${lead.id}" style="${overdue ? 'border-left-color:var(--red)' : ''}">
+      <div class="kanban-card ${overdue ? 'blocked' : ''}" data-open-lead="${lead.id}" draggable="true" data-drag-lead="${lead.id}" data-current-stage="${lead.status}" style="${overdue ? 'border-left-color:var(--red)' : ''}">
         <div class="kanban-card-title">${lead.name}</div>
         ${lead.company ? `<div style="font-size:11.5px;color:var(--text-3);margin-bottom:6px">${lead.company}</div>` : ''}
         ${group ? `<div style="margin-bottom:6px"><span class="badge" style="background:${group.color}20;color:${group.color};font-size:10.5px;padding:2px 8px">${group.name}</span></div>` : ''}
@@ -303,6 +303,66 @@ const LeadsView = {
         if (this.lockedGroup) prefill.groupId = this.lockedGroup;
         Modal.openLead(prefill);
       };
+    });
+
+    // ── Drag and drop ──
+    let draggedLeadId = null;
+    let draggedFromStage = null;
+
+    container.querySelectorAll('[data-drag-lead]').forEach(card => {
+      card.addEventListener('dragstart', (e) => {
+        draggedLeadId = card.dataset.dragLead;
+        draggedFromStage = card.dataset.currentStage;
+        card.style.opacity = '0.4';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', draggedLeadId);
+      });
+      card.addEventListener('dragend', () => {
+        card.style.opacity = '';
+        // Remove drag-over styles from all columns
+        container.querySelectorAll('.kanban-col').forEach(c => {
+          c.style.background = '';
+          c.style.outline = '';
+        });
+      });
+    });
+
+    container.querySelectorAll('.kanban-col').forEach(col => {
+      col.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        const stage = col.dataset.stage;
+        if (stage && stage !== draggedFromStage) {
+          col.style.background = 'var(--accent-bg)';
+          col.style.outline = '2px dashed var(--accent)';
+        }
+      });
+      col.addEventListener('dragleave', (e) => {
+        // Only clear if leaving the column entirely
+        if (!col.contains(e.relatedTarget)) {
+          col.style.background = '';
+          col.style.outline = '';
+        }
+      });
+      col.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        col.style.background = '';
+        col.style.outline = '';
+        const targetStage = col.dataset.stage;
+        if (!targetStage || !draggedLeadId || targetStage === draggedFromStage) return;
+
+        // Stages que requieren modal (perdido o ganado con extra info)
+        if (targetStage === 'lost') {
+          Modal.openLostReason(draggedLeadId);
+        } else if (targetStage === 'won') {
+          Modal.openWonConfirm(draggedLeadId);
+        } else {
+          await Store.updateLead(draggedLeadId, { status: targetStage });
+          Utils.toast('Lead movido a ' + (this.STAGES.find(s => s.id === targetStage)?.label || targetStage), 'success');
+        }
+        draggedLeadId = null;
+        draggedFromStage = null;
+      });
     });
   },
 };

@@ -261,6 +261,8 @@
   user-select: none;
 }
 .kanban-card:hover { border-color: var(--border-2); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
+.kanban-card[draggable="true"]:active { cursor: grabbing; }
+.kanban-col { transition: background 0.15s, outline 0.15s; }
 .kanban-card.blocked { border-left: 3px solid var(--red); }
 .kanban-card-title { font-size: 13px; font-weight: 500; color: var(--text-1); margin-bottom: 8px; line-height: 1.4; }
 .kanban-card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
