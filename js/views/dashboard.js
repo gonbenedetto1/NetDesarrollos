@@ -11,6 +11,9 @@ const DashboardView = {
     const activity = Store.getActivity(12);
     const workload = Store.getUserWorkload();
     const user    = Store.getCurrentUser();
+    const leadKpis = Store.getLeadKPIs();
+    const overdueLeads = Store.getLeadsWithOverdueFollowup();
+    const hasLeads = Store.getLeads().length > 0;
 
     const today = new Date();
     const greeting = today.getHours() < 12 ? 'Buenos días' : today.getHours() < 19 ? 'Buenas tardes' : 'Buenas noches';
@@ -44,6 +47,31 @@ const DashboardView = {
           <div class="kpi-sub">Esperando aprobación</div>
         </div>
       </div>
+
+      ${hasLeads ? `
+      <div class="card" style="margin-bottom:20px;padding:16px 20px">
+        <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+          <div style="display:flex;flex-direction:column;flex:1;min-width:140px">
+            <span style="font-size:11.5px;font-weight:500;color:var(--text-3);text-transform:uppercase;letter-spacing:0.04em">Pipeline activo</span>
+            <span style="font-size:22px;font-weight:600;color:var(--text-1);font-family:var(--font-display);margin-top:4px">${Utils.formatCurrency(leadKpis.pipelineTotal)}</span>
+            <span style="font-size:12px;color:var(--text-3);margin-top:2px">${leadKpis.openCount} leads · ponderado: ${Utils.formatCurrency(Math.round(leadKpis.weighted))}</span>
+          </div>
+          <div style="width:1px;height:50px;background:var(--border-1)"></div>
+          <div style="display:flex;flex-direction:column;flex:1;min-width:140px">
+            <span style="font-size:11.5px;font-weight:500;color:var(--text-3);text-transform:uppercase;letter-spacing:0.04em">Ganados este mes</span>
+            <span style="font-size:22px;font-weight:600;color:var(--green);font-family:var(--font-display);margin-top:4px">${Utils.formatCurrency(leadKpis.wonThisMonth)}</span>
+            <span style="font-size:12px;color:var(--text-3);margin-top:2px">${leadKpis.wonThisMonthCount} deals cerrados</span>
+          </div>
+          ${overdueLeads.length > 0 ? `
+          <div style="width:1px;height:50px;background:var(--border-1)"></div>
+          <div style="display:flex;flex-direction:column;flex:1;min-width:140px">
+            <span style="font-size:11.5px;font-weight:500;color:var(--red);text-transform:uppercase;letter-spacing:0.04em">⚠ Follow-ups vencidos</span>
+            <span style="font-size:22px;font-weight:600;color:var(--red);font-family:var(--font-display);margin-top:4px">${overdueLeads.length}</span>
+            <span style="font-size:12px;color:var(--red);margin-top:2px">requieren contacto urgente</span>
+          </div>` : ''}
+          <a class="btn btn-secondary btn-sm" data-route="/leads" style="white-space:nowrap">Ver leads →</a>
+        </div>
+      </div>` : ''}
 
       ${blocks.length > 0 ? `
       <div class="block-alert-section">

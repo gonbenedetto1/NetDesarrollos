@@ -16,6 +16,8 @@ const Store = (() => {
     activity:      [],
     notifications: [],
     budgets:       [],
+    leads:         [],
+    leadUpdates:   {},  // { leadId: [updates] }
   };
   let currentUser = null; // { id, name, initials, role, color, bg, email }
 
@@ -32,7 +34,7 @@ const Store = (() => {
   //  LOAD — fetch everything from Supabase into cache
   // ══════════════════════════════════════════════════════
   async function loadFromSupabase() {
-    const [profiles, systems, tasks, blocks, comments, activity, budgets, notifs] = await Promise.all([
+    const [profiles, systems, tasks, blocks, comments, activity, budgets, notifs, leads, leadUpdates] = await Promise.all([
       sb.from('profiles').select('*'),
       sb.from('systems').select('*').order('created_at'),
       sb.from('tasks').select('*').order('created_at'),
@@ -41,6 +43,8 @@ const Store = (() => {
       sb.from('activity').select('*').order('created_at', { ascending: false }).limit(200),
       sb.from('budgets').select('*'),
       sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(50),
+      sb.from('leads').select('*').order('created_at', { ascending: false }),
+      sb.from('lead_updates').select('*').order('created_at', { ascending: false }),
     ]);
 
     state.users    = profiles.data || [];
@@ -50,12 +54,20 @@ const Store = (() => {
     state.activity = activity.data || [];
     state.budgets  = budgets.data  || [];
     state.notifications = notifs.data || [];
+    state.leads    = leads.data    || [];
 
     // Group comments by task_id
     state.comments = {};
     (comments.data || []).forEach(c => {
       if (!state.comments[c.task_id]) state.comments[c.task_id] = [];
       state.comments[c.task_id].push(c);
+    });
+
+    // Group lead updates by lead_id
+    state.leadUpdates = {};
+    (leadUpdates.data || []).forEach(u => {
+      if (!state.leadUpdates[u.lead_id]) state.leadUpdates[u.lead_id] = [];
+      state.leadUpdates[u.lead_id].push(u);
     });
   }
 
@@ -71,6 +83,8 @@ const Store = (() => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => refreshTable('notifications'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'systems' }, () => refreshTable('systems'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets' }, () => refreshTable('budgets'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => refreshTable('leads'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_updates' }, () => refreshTable('lead_updates'))
       .subscribe();
   }
 
@@ -94,6 +108,20 @@ const Store = (() => {
       state.activity = data || [];
       _addCompatToAll();
       emit('activity:changed');
+    } else if (table === 'leads') {
+      const { data } = await sb.from('leads').select('*').order('created_at', { ascending: false });
+      state.leads = data || [];
+      _addCompatToAll();
+      emit('leads:changed');
+    } else if (table === 'lead_updates') {
+      const { data } = await sb.from('lead_updates').select('*').order('created_at', { ascending: false });
+      state.leadUpdates = {};
+      (data || []).forEach(u => {
+        if (!state.leadUpdates[u.lead_id]) state.leadUpdates[u.lead_id] = [];
+        state.leadUpdates[u.lead_id].push(u);
+      });
+      _addCompatToAll();
+      emit('lead_updates:changed');
     } else {
       const { data } = await sb.from(table).select('*').order('created_at');
       state[table] = data || [];
@@ -464,6 +492,36 @@ const Store = (() => {
     state.budgets.forEach(b => {
       Object.defineProperty(b, 'systemId', { get() { return this.system_id; }, enumerable: false });
     });
+    // Leads
+    state.leads.forEach(l => _toLeadCompat(l));
+    // Lead updates
+    Object.values(state.leadUpdates).flat().forEach(u => {
+      Object.defineProperties(u, {
+        leadId:    { get() { return this.lead_id; },    enumerable: false, configurable: true },
+        userId:    { get() { return this.user_id; },    enumerable: false, configurable: true },
+        createdAt: { get() { return this.created_at; }, enumerable: false, configurable: true },
+      });
+    });
+  }
+
+  function _toLeadCompat(l) {
+    if (!l) return l;
+    try {
+      Object.defineProperties(l, {
+        systemId:        { get() { return this.system_id; },        enumerable: false, configurable: true },
+        ownerId:         { get() { return this.owner_id; },         enumerable: false, configurable: true },
+        estimatedValue:  { get() { return this.estimated_value; },  enumerable: false, configurable: true },
+        nextActionDate:  { get() { return this.next_action_date; }, enumerable: false, configurable: true },
+        nextAction:      { get() { return this.next_action; },      enumerable: false, configurable: true },
+        lostReason:      { get() { return this.lost_reason; },      enumerable: false, configurable: true },
+        createdBy:       { get() { return this.created_by; },       enumerable: false, configurable: true },
+        createdAt:       { get() { return this.created_at; },       enumerable: false, configurable: true },
+        updatedAt:       { get() { return this.updated_at; },       enumerable: false, configurable: true },
+        wonAt:           { get() { return this.won_at; },           enumerable: false, configurable: true },
+        lostAt:          { get() { return this.lost_at; },          enumerable: false, configurable: true },
+      });
+    } catch(e) {}
+    return l;
   }
 
   function _userName(userId) {
@@ -477,6 +535,202 @@ const Store = (() => {
       if (text.includes('@' + firstName) || text.includes('@' + u.name)) mentioned.push(u.id);
     });
     return mentioned;
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  LEADS
+  // ══════════════════════════════════════════════════════
+  const LEAD_STATUS_DEFAULT_PROB = {
+    new: 10, contacted: 25, demo: 45, proposal: 65, negotiation: 80, won: 100, lost: 0,
+  };
+
+  function getLeads(filter = {}) {
+    let leads = state.leads;
+    if (filter.status)   leads = leads.filter(l => l.status === filter.status);
+    if (filter.ownerId)  leads = leads.filter(l => l.owner_id === filter.ownerId);
+    if (filter.systemId) leads = leads.filter(l => l.system_id === filter.systemId);
+    if (filter.source)   leads = leads.filter(l => l.source === filter.source);
+    if (filter.search) {
+      const q = filter.search.toLowerCase();
+      leads = leads.filter(l =>
+        (l.name || '').toLowerCase().includes(q) ||
+        (l.company || '').toLowerCase().includes(q) ||
+        (l.email || '').toLowerCase().includes(q) ||
+        (l.tags || []).some(t => t.toLowerCase().includes(q))
+      );
+    }
+    return leads;
+  }
+
+  function getLeadById(id) { return state.leads.find(l => l.id === id); }
+  function getLeadUpdates(leadId) { return state.leadUpdates[leadId] || []; }
+
+  async function createLead(data) {
+    const row = {
+      name:            data.name,
+      company:         data.company || '',
+      email:           data.email || '',
+      phone:           data.phone || '',
+      status:          data.status || 'new',
+      source:          data.source || 'other',
+      system_id:       data.systemId || null,
+      owner_id:        data.ownerId || null,
+      estimated_value: data.estimatedValue || 0,
+      probability:     data.probability != null ? data.probability : (LEAD_STATUS_DEFAULT_PROB[data.status || 'new']),
+      next_action_date: data.nextActionDate || null,
+      next_action:     data.nextAction || '',
+      tags:            data.tags || [],
+      notes:           data.notes || '',
+      created_by:      currentUser?.id,
+    };
+    const { data: l, error } = await sb.from('leads').insert(row).select().single();
+    if (error) { Utils.toast('Error al crear lead: ' + error.message, 'error'); return null; }
+    const lead = _toLeadCompat(l);
+    state.leads.unshift(lead);
+
+    // Initial status_change update
+    await _addLeadUpdateInternal(lead.id, currentUser?.id, 'status_change', `creo el lead (etapa: ${_leadStatusLabel(lead.status)})`);
+
+    // Notify owner if not creator
+    if (lead.owner_id && lead.owner_id !== currentUser?.id) {
+      await _addNotification(lead.owner_id, 'assigned', null, `${_userName(currentUser?.id)} te asigno el lead "${lead.name}"`);
+    }
+
+    emit('leads:changed');
+    return lead;
+  }
+
+  async function updateLead(id, data) {
+    const old = getLeadById(id);
+    if (!old) return;
+    const payload = { updated_at: new Date().toISOString() };
+    const keyMap = {
+      systemId: 'system_id', ownerId: 'owner_id', estimatedValue: 'estimated_value',
+      nextActionDate: 'next_action_date', nextAction: 'next_action', lostReason: 'lost_reason',
+    };
+    Object.keys(data).forEach(k => {
+      const dbKey = keyMap[k] || k;
+      payload[dbKey] = data[k];
+    });
+
+    // Track status change
+    const statusChanged = data.status && data.status !== old.status;
+    if (statusChanged) {
+      if (data.status === 'won')  payload.won_at  = new Date().toISOString();
+      if (data.status === 'lost') payload.lost_at = new Date().toISOString();
+      // Auto-bump probability to default for the new stage unless explicitly set
+      if (data.probability === undefined) {
+        payload.probability = LEAD_STATUS_DEFAULT_PROB[data.status];
+      }
+    }
+
+    const { data: l, error } = await sb.from('leads').update(payload).eq('id', id).select().single();
+    if (error) { Utils.toast('Error al actualizar: ' + error.message, 'error'); return; }
+
+    // Update local state
+    const i = state.leads.findIndex(x => x.id === id);
+    if (i >= 0) { state.leads[i] = _toLeadCompat(l); }
+
+    // Log status change as an update entry
+    if (statusChanged) {
+      const text = data.status === 'won' ? `marco como GANADO`
+                 : data.status === 'lost' ? `marco como PERDIDO${data.lostReason ? ' — ' + data.lostReason : ''}`
+                 : `movio a etapa "${_leadStatusLabel(data.status)}"`;
+      await _addLeadUpdateInternal(id, currentUser?.id, 'status_change', text);
+    }
+
+    // Notify new owner
+    if (data.ownerId && data.ownerId !== old.owner_id && data.ownerId !== currentUser?.id) {
+      await _addNotification(data.ownerId, 'assigned', null, `${_userName(currentUser?.id)} te asigno el lead "${old.name}"`);
+    }
+
+    emit('leads:changed');
+    return state.leads[i];
+  }
+
+  async function deleteLead(id) {
+    const { error } = await sb.from('leads').delete().eq('id', id);
+    if (error) { Utils.toast('Error al eliminar: ' + error.message, 'error'); return; }
+    state.leads = state.leads.filter(l => l.id !== id);
+    delete state.leadUpdates[id];
+    emit('leads:changed');
+  }
+
+  async function addLeadUpdate(leadId, type, text) {
+    if (!currentUser) return;
+    return _addLeadUpdateInternal(leadId, currentUser.id, type, text);
+  }
+
+  async function _addLeadUpdateInternal(leadId, userId, type, text) {
+    const { data: u, error } = await sb.from('lead_updates').insert({
+      lead_id: leadId, user_id: userId, type, text,
+    }).select().single();
+    if (error) return null;
+    if (!state.leadUpdates[leadId]) state.leadUpdates[leadId] = [];
+    state.leadUpdates[leadId].unshift(u);
+    _addCompatToAll();
+    emit('lead_updates:changed');
+    return u;
+  }
+
+  function _leadStatusLabel(s) {
+    return { new:'Nuevo', contacted:'Contactado', demo:'Demo agendada', proposal:'Propuesta enviada', negotiation:'Negociacion', won:'Ganado', lost:'Perdido' }[s] || s;
+  }
+
+  function getLeadKPIs() {
+    const open = state.leads.filter(l => !['won','lost'].includes(l.status));
+    const won = state.leads.filter(l => l.status === 'won');
+    const lost = state.leads.filter(l => l.status === 'lost');
+    const pipelineTotal = open.reduce((s, l) => s + Number(l.estimated_value || 0), 0);
+    const weighted = open.reduce((s, l) => s + Number(l.estimated_value || 0) * (l.probability || 0) / 100, 0);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const wonThisMonth = won.filter(l => l.won_at && l.won_at >= monthStart);
+    const newThisMonth = state.leads.filter(l => l.created_at >= monthStart);
+
+    const conversionRate = (won.length + lost.length) > 0
+      ? Math.round(won.length / (won.length + lost.length) * 100) : 0;
+
+    // Avg time to close (won leads)
+    const closeTimes = won.filter(l => l.created_at && l.won_at).map(l =>
+      (new Date(l.won_at) - new Date(l.created_at)) / 86400000);
+    const avgCloseDays = closeTimes.length > 0
+      ? Math.round(closeTimes.reduce((s, d) => s + d, 0) / closeTimes.length) : 0;
+
+    return {
+      pipelineTotal, weighted,
+      openCount: open.length,
+      wonThisMonth: wonThisMonth.reduce((s, l) => s + Number(l.estimated_value || 0), 0),
+      wonThisMonthCount: wonThisMonth.length,
+      newThisMonthCount: newThisMonth.length,
+      conversionRate,
+      avgCloseDays,
+      totalLeads: state.leads.length,
+      wonCount: won.length,
+      lostCount: lost.length,
+    };
+  }
+
+  function getLeadFunnel() {
+    const stages = ['new','contacted','demo','proposal','negotiation','won','lost'];
+    return stages.map(s => {
+      const leads = state.leads.filter(l => l.status === s);
+      return {
+        status: s,
+        label: _leadStatusLabel(s),
+        count: leads.length,
+        value: leads.reduce((sum, l) => sum + Number(l.estimated_value || 0), 0),
+      };
+    });
+  }
+
+  function getLeadsWithOverdueFollowup() {
+    const today = new Date().toISOString().split('T')[0];
+    return state.leads.filter(l =>
+      !['won','lost'].includes(l.status) &&
+      l.next_action_date && l.next_action_date < today
+    );
   }
 
   // ══════════════════════════════════════════════════════
@@ -509,6 +763,10 @@ const Store = (() => {
     getDashboardKPIs, getUserWorkload,
     // Budgets
     getMarketingBudgets, updateMarketingBudget,
+    // Leads
+    getLeads, getLeadById, getLeadUpdates, createLead, updateLead, deleteLead, addLeadUpdate,
+    getLeadKPIs, getLeadFunnel, getLeadsWithOverdueFollowup,
+    leadStatusLabel: _leadStatusLabel,
     // Users
     getUsers() { return state.users; },
     getUserById(id) { return state.users.find(u => u.id === id); },

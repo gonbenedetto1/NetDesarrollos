@@ -386,6 +386,262 @@ const Modal = {
     };
     setTimeout(() => { const inp = document.getElementById('complete-hours'); if (inp) inp.select(); }, 100);
   },
+
+  // ── Lead modal (create/edit) ──────────────
+  openLead(prefill = {}) {
+    const systems = Store.getSystems();
+    const users   = Store.getUsers();
+    const isEdit  = !!prefill.id;
+    const stages  = LeadsView.STAGES;
+    const sources = LeadsView.SOURCES;
+    const tagsStr = (prefill.tags || []).join(', ');
+
+    this.open(`
+      <div class="modal-header">
+        <span class="modal-title">${isEdit ? 'Editar lead' : 'Nuevo lead'}</span>
+        <button class="modal-close" id="mc-close">${Utils.icon('close',14)}</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Nombre del contacto *</label>
+            <input class="form-input" id="l-name" placeholder="Juan Perez" value="${prefill.name||''}">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Empresa</label>
+            <input class="form-input" id="l-company" placeholder="Inmobiliaria XYZ" value="${prefill.company||''}">
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:16px">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Email</label>
+            <input class="form-input" type="email" id="l-email" value="${prefill.email||''}">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Telefono</label>
+            <input class="form-input" id="l-phone" value="${prefill.phone||''}">
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:16px">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Sistema de interes</label>
+            <select class="form-select" id="l-system">
+              <option value="">Sin definir</option>
+              ${systems.map(s => `<option value="${s.id}" ${prefill.systemId===s.id||prefill.system_id===s.id?'selected':''}>${s.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Responsable</label>
+            <select class="form-select" id="l-owner">
+              <option value="">Sin asignar</option>
+              ${users.map(u => `<option value="${u.id}" ${prefill.ownerId===u.id||prefill.owner_id===u.id?'selected':''}>${u.name}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:16px">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Etapa</label>
+            <select class="form-select" id="l-status">
+              ${stages.map(s => `<option value="${s.id}" ${(prefill.status||'new')===s.id?'selected':''}>${s.label}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Origen</label>
+            <select class="form-select" id="l-source">
+              ${sources.map(s => `<option value="${s.id}" ${(prefill.source||'other')===s.id?'selected':''}>${s.label}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:16px">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Valor estimado (ARS)</label>
+            <input class="form-input" type="number" id="l-value" placeholder="50000" value="${prefill.estimated_value||prefill.estimatedValue||''}">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Probabilidad (%)</label>
+            <input class="form-input" type="number" min="0" max="100" id="l-prob" value="${prefill.probability != null ? prefill.probability : 20}">
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:16px">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Proxima accion (fecha)</label>
+            <input class="form-input" type="date" id="l-next-date" value="${prefill.next_action_date||prefill.nextActionDate||''}">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Descripcion de la accion</label>
+            <input class="form-input" id="l-next-text" placeholder="Llamar para seguimiento..." value="${prefill.next_action||prefill.nextAction||''}">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:16px">
+          <label class="form-label">Tags (separados por coma)</label>
+          <input class="form-input" id="l-tags" placeholder="hot, enterprise, agencia-chica" value="${tagsStr}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notas</label>
+          <textarea class="form-textarea" id="l-notes" placeholder="Contexto, detalles, historia del lead...">${prefill.notes||''}</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" id="mc-cancel">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="mc-save">${isEdit?'Guardar cambios':'Crear lead'}</button>
+      </div>`);
+
+    document.getElementById('mc-close').onclick  = () => this.close();
+    document.getElementById('mc-cancel').onclick = () => this.close();
+    document.getElementById('mc-save').onclick   = async () => {
+      const name = document.getElementById('l-name').value.trim();
+      if (!name) { Utils.toast('El nombre es obligatorio','error'); return; }
+
+      const tagsStr = document.getElementById('l-tags').value;
+      const data = {
+        name,
+        company:         document.getElementById('l-company').value,
+        email:           document.getElementById('l-email').value,
+        phone:           document.getElementById('l-phone').value,
+        systemId:        document.getElementById('l-system').value || null,
+        ownerId:         document.getElementById('l-owner').value || null,
+        status:          document.getElementById('l-status').value,
+        source:          document.getElementById('l-source').value,
+        estimatedValue:  parseFloat(document.getElementById('l-value').value) || 0,
+        probability:     parseInt(document.getElementById('l-prob').value) || 0,
+        nextActionDate:  document.getElementById('l-next-date').value || null,
+        nextAction:      document.getElementById('l-next-text').value,
+        tags:            tagsStr.split(',').map(t => t.trim()).filter(Boolean),
+        notes:           document.getElementById('l-notes').value,
+      };
+
+      if (isEdit) { await Store.updateLead(prefill.id, data); Utils.toast('Lead actualizado'); }
+      else        { await Store.createLead(data); Utils.toast('Lead creado','success'); }
+      this.close();
+      if (isEdit) Panel.openLead(prefill.id);
+    };
+  },
+
+  // ── Lead update (interaccion) ────────────
+  openLeadUpdate(leadId) {
+    const lead = Store.getLeadById(leadId);
+    const types = [
+      { id:'call',     label:'📞 Llamada' },
+      { id:'meeting',  label:'🤝 Reunion' },
+      { id:'email',    label:'✉️ Email enviado' },
+      { id:'demo',     label:'🖥️ Demo realizada' },
+      { id:'proposal', label:'📄 Propuesta enviada' },
+      { id:'note',     label:'📝 Nota' },
+    ];
+    this.open(`
+      <div class="modal-header">
+        <span class="modal-title">Agregar interaccion</span>
+        <button class="modal-close" id="mc-close">${Utils.icon('close',14)}</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:var(--bg-input);border-radius:var(--r-md);padding:12px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:600">${lead?.name||''}</div>
+          <div style="font-size:12px;color:var(--text-3)">${lead?.company||''}</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de interaccion</label>
+          <select class="form-select" id="u-type">
+            ${types.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descripcion *</label>
+          <textarea class="form-textarea" id="u-text" placeholder="Que paso, que se hablo, proximos pasos..." style="min-height:120px"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" id="mc-cancel">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="mc-save">Guardar</button>
+      </div>`);
+
+    document.getElementById('mc-close').onclick  = () => this.close();
+    document.getElementById('mc-cancel').onclick = () => this.close();
+    document.getElementById('mc-save').onclick   = async () => {
+      const text = document.getElementById('u-text').value.trim();
+      if (!text) { Utils.toast('Describí la interaccion','error'); return; }
+      const type = document.getElementById('u-type').value;
+      await Store.addLeadUpdate(leadId, type, text);
+      Utils.toast('Interaccion registrada','success');
+      this.close();
+      Panel.openLead(leadId);
+    };
+  },
+
+  // ── Lost reason ──────────────────────────
+  openLostReason(leadId) {
+    const reasons = ['Competencia', 'Precio', 'Timing', 'No-fit', 'Sin respuesta', 'Otro'];
+    this.open(`
+      <div class="modal-header">
+        <span class="modal-title">Marcar como perdido</span>
+        <button class="modal-close" id="mc-close">${Utils.icon('close',14)}</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:var(--red-bg);border-radius:var(--r-md);padding:12px;margin-bottom:16px">
+          <div style="font-size:12px;color:var(--red-text)">Queremos entender por que. Eso nos ayuda a mejorar.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Razon *</label>
+          <select class="form-select" id="lost-reason-select">
+            ${reasons.map(r => `<option value="${r}">${r}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Detalles (opcional)</label>
+          <textarea class="form-textarea" id="lost-note" placeholder="Informacion adicional..." style="min-height:80px"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" id="mc-cancel">Cancelar</button>
+        <button class="btn btn-danger btn-sm" id="mc-save">Marcar como perdido</button>
+      </div>`);
+
+    document.getElementById('mc-close').onclick  = () => this.close();
+    document.getElementById('mc-cancel').onclick = () => this.close();
+    document.getElementById('mc-save').onclick   = async () => {
+      const reason = document.getElementById('lost-reason-select').value;
+      const note   = document.getElementById('lost-note').value.trim();
+      const fullReason = note ? `${reason} — ${note}` : reason;
+      await Store.updateLead(leadId, { status: 'lost', lostReason: fullReason });
+      Utils.toast('Lead marcado como perdido','error');
+      this.close();
+      Panel.openLead(leadId);
+    };
+  },
+
+  // ── Won confirm ──────────────────────────
+  openWonConfirm(leadId) {
+    const lead = Store.getLeadById(leadId);
+    this.open(`
+      <div class="modal-header">
+        <span class="modal-title">🎉 Marcar como ganado</span>
+        <button class="modal-close" id="mc-close">${Utils.icon('close',14)}</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:var(--green-bg);border-radius:var(--r-md);padding:12px;margin-bottom:16px">
+          <div style="font-size:13px;font-weight:600;color:var(--green-text)">${lead?.name||''}</div>
+          <div style="font-size:12px;color:var(--green-text);opacity:0.8">${lead?.company||''}</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor final del deal (ARS)</label>
+          <input class="form-input" type="number" id="won-value" value="${lead?.estimated_value||0}">
+          <div class="form-hint" style="margin-top:4px">Ajustalo si hubo negociacion en el precio final.</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" id="mc-cancel">Cancelar</button>
+        <button class="btn btn-sm" id="mc-save" style="background:var(--green);color:white">Confirmar ganado</button>
+      </div>`);
+
+    document.getElementById('mc-close').onclick  = () => this.close();
+    document.getElementById('mc-cancel').onclick = () => this.close();
+    document.getElementById('mc-save').onclick   = async () => {
+      const value = parseFloat(document.getElementById('won-value').value) || 0;
+      await Store.updateLead(leadId, { status: 'won', estimatedValue: value, probability: 100 });
+      Utils.toast('¡Deal ganado! 🎉','success');
+      this.close();
+      Panel.openLead(leadId);
+    };
+  },
 };
 
 // ══════════════════════════════════════════════
@@ -595,6 +851,192 @@ const Panel = {
       send.onclick = doSend;
       inp.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } };
     }
+  },
+
+  openLead(leadId) {
+    const lead = Store.getLeadById(leadId);
+    if (!lead) return;
+
+    const owner   = lead.owner_id  ? Store.getUserById(lead.owner_id)  : null;
+    const system  = lead.system_id ? Store.getSystemById(lead.system_id) : null;
+    const creator = lead.created_by ? Store.getUserById(lead.created_by) : null;
+    const updates = Store.getLeadUpdates(leadId);
+    const stage   = LeadsView.STAGES.find(s => s.id === lead.status);
+    const sourceLabel = (LeadsView.SOURCES.find(s => s.id === lead.source) || { label: lead.source }).label;
+    const today = new Date().toISOString().split('T')[0];
+    const overdue = lead.next_action_date && lead.next_action_date < today && !['won','lost'].includes(lead.status);
+    const weightedValue = Math.round(Number(lead.estimated_value || 0) * (lead.probability || 0) / 100);
+
+    const updateIcon = {
+      call:'📞', meeting:'🤝', email:'✉️', demo:'🖥️', proposal:'📄', note:'📝', status_change:'🔄',
+    };
+
+    // Suggest next stage
+    const stageOrder = ['new','contacted','demo','proposal','negotiation','won'];
+    const currentIdx = stageOrder.indexOf(lead.status);
+    const nextStageId = currentIdx >= 0 && currentIdx < stageOrder.length - 1 ? stageOrder[currentIdx + 1] : null;
+    const nextStageLabel = nextStageId ? Store.leadStatusLabel(nextStageId) : null;
+
+    this.open(`
+      <div class="panel-header">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+            ${stage ? `<span class="badge" style="background:${stage.color}20;color:${stage.color};font-weight:600">${stage.label}</span>` : ''}
+            ${(lead.tags||[]).map(t => `<span class="badge badge-medium" style="font-size:10.5px">${t}</span>`).join('')}
+          </div>
+          <h3 style="font-size:15px;font-weight:600;line-height:1.35">${lead.name}</h3>
+          ${lead.company ? `<div style="font-size:12.5px;color:var(--text-3);margin-top:2px">${lead.company}</div>` : ''}
+        </div>
+        <button class="btn btn-ghost btn-icon" id="panel-close">${Utils.icon('close')}</button>
+      </div>
+
+      <div class="panel-body">
+        ${overdue ? `
+        <div style="background:var(--red-bg);border:1px solid #FFCDD3;border-radius:var(--r-md);padding:12px;margin-bottom:20px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <div style="width:7px;height:7px;border-radius:50%;background:var(--red)"></div>
+            <span style="font-size:12.5px;font-weight:600;color:var(--red-text)">Follow-up vencido</span>
+          </div>
+          <p style="font-size:13px;color:var(--red-text);line-height:1.4">${lead.next_action || 'Accion pendiente'} · ${Utils.formatDate(lead.next_action_date)}</p>
+        </div>` : ''}
+
+        <!-- Contacto -->
+        <div class="panel-section">
+          <div class="panel-section-title">Contacto</div>
+          <div class="detail-row">
+            <span class="detail-label">Email</span>
+            <div class="detail-value">${lead.email ? `<a href="mailto:${lead.email}" style="color:var(--accent)">${lead.email}</a>` : '<span style="color:var(--text-4)">—</span>'}</div>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Telefono</span>
+            <div class="detail-value">${lead.phone ? `<a href="tel:${lead.phone}" style="color:var(--accent)">${lead.phone}</a>` : '<span style="color:var(--text-4)">—</span>'}</div>
+          </div>
+        </div>
+
+        <!-- Oportunidad -->
+        <div class="panel-section">
+          <div class="panel-section-title">Oportunidad</div>
+          <div class="detail-row">
+            <span class="detail-label">Sistema</span>
+            <div class="detail-value">${system ? `<div style="display:flex;align-items:center;gap:6px"><div style="width:7px;height:7px;border-radius:50%;background:${system.color}"></div><span>${system.name}</span></div>` : '<span style="color:var(--text-4)">—</span>'}</div>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Valor</span>
+            <span class="detail-value" style="font-weight:600">${Number(lead.estimated_value) > 0 ? Utils.formatCurrency(lead.estimated_value) : '—'}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Probabilidad</span>
+            <span class="detail-value">${lead.probability}%</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Valor ponderado</span>
+            <span class="detail-value" style="color:var(--accent);font-weight:600">${Utils.formatCurrency(weightedValue)}</span>
+          </div>
+        </div>
+
+        <!-- Responsable y origen -->
+        <div class="panel-section">
+          <div class="panel-section-title">Asignacion</div>
+          <div class="detail-row">
+            <span class="detail-label">Responsable</span>
+            <div class="detail-value" style="display:flex;align-items:center;gap:7px">
+              ${owner ? `${Utils.avatarHtml(owner,'sm')}<span>${owner.name}</span>` : '<span style="color:var(--text-4)">Sin asignar</span>'}
+            </div>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Origen</span>
+            <span class="detail-value">${sourceLabel}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Creado</span>
+            <span class="detail-value">${Utils.timeAgo(lead.created_at)}${creator ? ` por ${creator.name.split(' ')[0]}`:''}</span>
+          </div>
+        </div>
+
+        <!-- Proxima accion -->
+        <div class="panel-section">
+          <div class="panel-section-title">Proxima accion</div>
+          ${lead.next_action_date || lead.next_action ? `
+            <div style="padding:10px 12px;background:${overdue?'var(--red-bg)':'var(--bg-input)'};border-radius:var(--r-md)">
+              ${lead.next_action_date ? `<div style="font-size:13px;font-weight:600;color:${overdue?'var(--red-text)':'var(--text-1)'};margin-bottom:2px">${Utils.formatDate(lead.next_action_date)}${overdue?' · Vencida':''}</div>` : ''}
+              ${lead.next_action ? `<div style="font-size:12.5px;color:${overdue?'var(--red-text)':'var(--text-2)'}">${lead.next_action}</div>` : ''}
+            </div>
+          ` : '<p style="font-size:13px;color:var(--text-4)">Sin accion programada. Usa el boton Editar para agregar.</p>'}
+        </div>
+
+        ${lead.notes ? `
+        <div class="panel-section">
+          <div class="panel-section-title">Notas</div>
+          <p style="font-size:13px;color:var(--text-2);line-height:1.55;white-space:pre-wrap">${lead.notes}</p>
+        </div>` : ''}
+
+        ${lead.status === 'lost' && lead.lost_reason ? `
+        <div class="panel-section">
+          <div class="panel-section-title">Razon de perdida</div>
+          <div style="padding:10px 12px;background:var(--red-bg);border-radius:var(--r-md);font-size:13px;color:var(--red-text)">${lead.lost_reason}</div>
+        </div>` : ''}
+
+        <!-- Timeline de interacciones -->
+        <div class="panel-section">
+          <div class="panel-section-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span>Interacciones (${updates.length})</span>
+            <button class="btn btn-primary btn-xs" data-add-update="${lead.id}">${Utils.icon('plus',12)} Agregar</button>
+          </div>
+          ${updates.length === 0 ? '<p style="font-size:13px;color:var(--text-4)">Aun no hay interacciones. Agregá la primera para llevar registro.</p>' :
+            `<div style="display:flex;flex-direction:column;gap:10px">${updates.map(u => {
+              const usr = Store.getUserById(u.user_id);
+              return `<div style="display:flex;gap:10px;padding:10px;background:var(--bg-input);border-radius:var(--r-md)">
+                <div style="font-size:18px;flex-shrink:0;line-height:1">${updateIcon[u.type]||'•'}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12.5px;color:var(--text-1);line-height:1.45">${u.text}</div>
+                  <div style="font-size:11px;color:var(--text-4);margin-top:3px">${usr ? usr.name.split(' ')[0] : '?'} · ${Utils.timeAgo(u.created_at)}</div>
+                </div>
+              </div>`;
+            }).join('')}</div>`}
+        </div>
+
+        <!-- Acciones -->
+        <div class="panel-section">
+          <div class="panel-section-title">Acciones</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${nextStageId ? `<button class="btn btn-primary btn-xs" data-lead-stage="${nextStageId}">→ ${nextStageLabel}</button>` : ''}
+            ${!['won','lost'].includes(lead.status) ? `<button class="btn btn-xs" style="background:var(--green);color:white" data-lead-won="${lead.id}">🎉 Ganado</button>` : ''}
+            ${!['won','lost'].includes(lead.status) ? `<button class="btn btn-xs" style="background:var(--red-bg);color:var(--red-text)" data-lead-lost="${lead.id}">Perdido</button>` : ''}
+            <button class="btn btn-secondary btn-xs" data-edit-lead="${lead.id}">${Utils.icon('edit',12)} Editar</button>
+            <button class="btn btn-ghost btn-xs" data-delete-lead="${lead.id}" style="color:var(--text-3)">Eliminar</button>
+          </div>
+        </div>
+      </div>`);
+
+    document.getElementById('panel-close').onclick = () => this.close();
+
+    const cont = document.getElementById('panel-container');
+    cont.querySelectorAll('[data-add-update]').forEach(el => {
+      el.onclick = () => Modal.openLeadUpdate(el.dataset.addUpdate);
+    });
+    cont.querySelectorAll('[data-lead-stage]').forEach(el => {
+      el.onclick = async () => {
+        await Store.updateLead(leadId, { status: el.dataset.leadStage });
+        Panel.openLead(leadId);
+      };
+    });
+    cont.querySelectorAll('[data-lead-won]').forEach(el => {
+      el.onclick = () => Modal.openWonConfirm(el.dataset.leadWon);
+    });
+    cont.querySelectorAll('[data-lead-lost]').forEach(el => {
+      el.onclick = () => Modal.openLostReason(el.dataset.leadLost);
+    });
+    cont.querySelectorAll('[data-edit-lead]').forEach(el => {
+      el.onclick = () => Modal.openLead(Store.getLeadById(el.dataset.editLead));
+    });
+    cont.querySelectorAll('[data-delete-lead]').forEach(el => {
+      el.onclick = async () => {
+        if (!confirm(`Eliminar el lead "${lead.name}"? Esta accion no se puede deshacer.`)) return;
+        await Store.deleteLead(el.dataset.deleteLead);
+        Utils.toast('Lead eliminado','success');
+        Panel.close();
+      };
+    });
   },
 };
 

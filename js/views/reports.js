@@ -224,8 +224,199 @@ const ReportsView = {
             <div style="font-size:12px;color:var(--text-3)">de ${Utils.formatCurrency(mktTotal)} presupuestado</div>
           </div>
         </div>
-      </div>`;
+      </div>
+
+      ${this.renderLeadsSection()}
+      `;
 
     document.getElementById('edit-budgets-btn')?.addEventListener('click', () => Modal.openBudgets());
+  },
+
+  renderLeadsSection() {
+    const kpis = Store.getLeadKPIs();
+    const funnel = Store.getLeadFunnel();
+    const leads = Store.getLeads();
+    if (leads.length === 0) return '';
+
+    const users = Store.getUsers();
+    const systems = Store.getSystems();
+
+    // Leads por source
+    const sourceGroups = {};
+    leads.forEach(l => {
+      const s = l.source || 'other';
+      if (!sourceGroups[s]) sourceGroups[s] = { count: 0, value: 0 };
+      sourceGroups[s].count++;
+      sourceGroups[s].value += Number(l.estimated_value || 0);
+    });
+    const sourceLabels = { web:'Web', referral:'Referido', event:'Evento', cold:'Cold outreach', social:'Redes sociales', other:'Otro' };
+
+    // Por responsable
+    const ownerStats = users.map(u => {
+      const owned = leads.filter(l => l.owner_id === u.id);
+      const won = owned.filter(l => l.status === 'won');
+      const open = owned.filter(l => !['won','lost'].includes(l.status));
+      return {
+        ...u,
+        total: owned.length,
+        pipeline: open.reduce((s, l) => s + Number(l.estimated_value || 0), 0),
+        wonValue: won.reduce((s, l) => s + Number(l.estimated_value || 0), 0),
+        wonCount: won.length,
+      };
+    }).filter(u => u.total > 0);
+
+    // Por sistema
+    const sysStats = systems.map(s => {
+      const sysLeads = leads.filter(l => l.system_id === s.id);
+      return { ...s, count: sysLeads.length, value: sysLeads.reduce((sum, l) => sum + Number(l.estimated_value || 0), 0) };
+    }).filter(s => s.count > 0);
+
+    // Lost reasons
+    const lostLeads = leads.filter(l => l.status === 'lost' && l.lost_reason);
+    const reasonGroups = {};
+    lostLeads.forEach(l => {
+      const r = (l.lost_reason || '').split(' — ')[0] || 'Otro';
+      reasonGroups[r] = (reasonGroups[r] || 0) + 1;
+    });
+
+    const maxSourceCount = Math.max(...Object.values(sourceGroups).map(g => g.count), 1);
+    const maxFunnel = Math.max(...funnel.map(f => f.count), 1);
+
+    return `
+      <!-- ═════════ Ventas / Leads ═════════ -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+          <span class="section-title">Ventas / Leads</span>
+          <span class="badge badge-medium">Pipeline ${new Date().getFullYear()}</span>
+          <a class="section-link" data-route="/leads" style="margin-left:auto" onclick="Router.navigate('/leads');return false" href="#/leads">Ir a leads →</a>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpi-grid" style="margin-bottom:24px;grid-template-columns:repeat(5,1fr)">
+          <div class="kpi-card">
+            <div class="kpi-label">Pipeline total</div>
+            <div class="kpi-value" style="font-size:20px">${Utils.formatCurrency(kpis.pipelineTotal)}</div>
+            <div class="kpi-sub">${kpis.openCount} leads abiertos</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Pipeline ponderado</div>
+            <div class="kpi-value" style="font-size:20px;color:var(--accent)">${Utils.formatCurrency(Math.round(kpis.weighted))}</div>
+            <div class="kpi-sub">valor × probabilidad</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Ganados este mes</div>
+            <div class="kpi-value" style="font-size:20px;color:var(--green)">${Utils.formatCurrency(kpis.wonThisMonth)}</div>
+            <div class="kpi-sub up">${kpis.wonThisMonthCount} deals</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Conversion</div>
+            <div class="kpi-value" style="font-size:20px">${kpis.conversionRate}<span style="font-size:13px;font-weight:400">%</span></div>
+            <div class="kpi-sub">${kpis.wonCount} gan. / ${kpis.lostCount} perd.</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Cierre promedio</div>
+            <div class="kpi-value" style="font-size:20px">${kpis.avgCloseDays}<span style="font-size:13px;font-weight:400">d</span></div>
+            <div class="kpi-sub">dias por deal</div>
+          </div>
+        </div>
+
+        <!-- Funnel -->
+        <div style="margin-bottom:24px">
+          <div class="section-header"><span class="section-title" style="font-size:13px">Funnel de ventas</span></div>
+          <div class="chart-bar-container">
+            ${funnel.map(f => {
+              const stage = LeadsView.STAGES.find(s => s.id === f.status);
+              return `
+              <div class="chart-bar-row">
+                <div class="chart-bar-label" style="display:flex;align-items:center;gap:6px;width:140px">
+                  <div style="width:7px;height:7px;border-radius:50%;background:${stage?.color||'var(--text-3)'}"></div>
+                  ${f.label}
+                </div>
+                <div class="chart-bar-track">
+                  <div class="chart-bar-fill" style="width:${Math.round(f.count / maxFunnel * 100)}%;background:${stage?.color||'var(--accent)'}"></div>
+                </div>
+                <span class="chart-bar-value" style="width:90px">${f.count} · ${Utils.formatCurrency(f.value)}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Responsables + Sources -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+          <div>
+            <div class="section-header"><span class="section-title" style="font-size:13px">Pipeline por responsable</span></div>
+            <div class="chart-bar-container">
+              ${ownerStats.length === 0 ? '<p style="font-size:12.5px;color:var(--text-4)">Sin datos</p>' :
+                ownerStats.sort((a,b) => b.pipeline - a.pipeline).map(u => {
+                  const maxPipe = Math.max(...ownerStats.map(x => x.pipeline), 1);
+                  return `
+                  <div class="chart-bar-row">
+                    <div class="chart-bar-label" style="display:flex;align-items:center;gap:6px">
+                      ${Utils.avatarHtml(u,'sm')} ${u.name.split(' ')[0]}
+                    </div>
+                    <div class="chart-bar-track">
+                      <div class="chart-bar-fill" style="width:${Math.round(u.pipeline / maxPipe * 100)}%;background:${u.color}"></div>
+                    </div>
+                    <span class="chart-bar-value" style="width:90px">${Utils.formatCurrency(u.pipeline)}</span>
+                  </div>`;
+                }).join('')}
+            </div>
+          </div>
+          <div>
+            <div class="section-header"><span class="section-title" style="font-size:13px">Leads por origen</span></div>
+            <div class="chart-bar-container">
+              ${Object.entries(sourceGroups).sort((a,b) => b[1].count - a[1].count).map(([src, g]) => `
+                <div class="chart-bar-row">
+                  <div class="chart-bar-label">${sourceLabels[src]||src}</div>
+                  <div class="chart-bar-track">
+                    <div class="chart-bar-fill" style="width:${Math.round(g.count / maxSourceCount * 100)}%;background:var(--accent)"></div>
+                  </div>
+                  <span class="chart-bar-value">${g.count}</span>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- Sistema + razones perdida -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div class="section-header"><span class="section-title" style="font-size:13px">Interes por sistema</span></div>
+            ${sysStats.length === 0 ? '<p style="font-size:12.5px;color:var(--text-4)">Sin datos</p>' : `
+            <div class="chart-bar-container">
+              ${sysStats.sort((a,b) => b.count - a.count).map(s => {
+                const maxSys = Math.max(...sysStats.map(x => x.count), 1);
+                return `
+                <div class="chart-bar-row">
+                  <div class="chart-bar-label" style="display:flex;align-items:center;gap:6px">
+                    <div style="width:7px;height:7px;border-radius:50%;background:${s.color}"></div>
+                    ${s.name}
+                  </div>
+                  <div class="chart-bar-track">
+                    <div class="chart-bar-fill" style="width:${Math.round(s.count / maxSys * 100)}%;background:${s.color}"></div>
+                  </div>
+                  <span class="chart-bar-value" style="width:90px">${s.count} · ${Utils.formatCurrency(s.value)}</span>
+                </div>`;
+              }).join('')}
+            </div>`}
+          </div>
+          <div>
+            <div class="section-header"><span class="section-title" style="font-size:13px">Razones de leads perdidos</span></div>
+            ${Object.keys(reasonGroups).length === 0 ? '<p style="font-size:12.5px;color:var(--text-4)">Aun no hay leads perdidos</p>' : `
+            <div class="chart-bar-container">
+              ${Object.entries(reasonGroups).sort((a,b) => b[1] - a[1]).map(([reason, count]) => {
+                const maxR = Math.max(...Object.values(reasonGroups), 1);
+                return `
+                <div class="chart-bar-row">
+                  <div class="chart-bar-label">${reason}</div>
+                  <div class="chart-bar-track">
+                    <div class="chart-bar-fill" style="width:${Math.round(count / maxR * 100)}%;background:var(--red)"></div>
+                  </div>
+                  <span class="chart-bar-value">${count}</span>
+                </div>`;
+              }).join('')}
+            </div>`}
+          </div>
+        </div>
+      </div>`;
   },
 };

@@ -32,6 +32,7 @@ const Router = {
       '/dashboard':     () => { DashboardView.render();  Sidebar.setActive('/dashboard'); },
       '/systems':       () => { SystemsView.renderList(); Sidebar.setActive('/systems'); },
       '/tasks':         () => { TasksView.render();       Sidebar.setActive('/tasks'); },
+      '/leads':         () => { LeadsView.render();       Sidebar.setActive('/leads'); },
       '/blocks':        () => { BlocksView.render();      Sidebar.setActive('/blocks'); },
       '/calendar':      () => { CalendarView.render();    Sidebar.setActive('/calendar'); },
       '/reports':       () => { ReportsView.render();     Sidebar.setActive('/reports'); },
@@ -79,6 +80,7 @@ const App = {
     // Store listeners
     Store.on('blocks:changed',        () => { Sidebar.render(); Notifications.render(); });
     Store.on('systems:changed',       () => Sidebar.render());
+    Store.on('leads:changed',         () => Sidebar.render());
     Store.on('notifications:changed', () => Notifications.render());
     Store.on('activity:changed',      () => {});
 

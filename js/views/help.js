@@ -159,6 +159,70 @@ const HelpView = {
         </div>
       </div>
 
+      <!-- Leads / CRM -->
+      <div class="card" style="margin-bottom:16px;border-left:4px solid var(--accent)">
+        <h3 style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          <span style="width:28px;height:28px;border-radius:50%;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">5</span>
+          Como usar el panel de Leads (CRM)
+        </h3>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:14px">
+          Cada posible cliente es un <strong>lead</strong>. Se carga una sola vez y todo el equipo ve el estado actual — sin tener que preguntar.
+        </p>
+
+        <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:8px">Las 7 etapas del pipeline:</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+          ${[
+            ['Nuevo','10%','#AEAEB2','Recien identificado'],
+            ['Contactado','25%','#0071E3','Ya hablamos'],
+            ['Demo agendada','45%','#5AC8FA','Demo programada'],
+            ['Propuesta enviada','65%','#BF5AF2','Cotizacion enviada'],
+            ['Negociacion','80%','#FF9F0A','Revisando terminos'],
+            ['Ganado','100%','#28C76F','Firmo ✓'],
+            ['Perdido','0%','#FF3B30','No se concreto'],
+          ].map(([name, prob, color, desc]) => `
+            <div style="padding:8px 10px;background:${color}15;border:1px solid ${color}40;border-radius:var(--r-md)">
+              <div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">
+                <div style="width:7px;height:7px;border-radius:50%;background:${color}"></div>
+                <span style="font-size:12px;font-weight:600;color:var(--text-1)">${name}</span>
+                <span style="font-size:10.5px;color:var(--text-3);margin-left:auto">${prob}</span>
+              </div>
+              <div style="font-size:10.5px;color:var(--text-3)">${desc}</div>
+            </div>`).join('')}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div style="background:var(--bg-input);border-radius:var(--r-md);padding:12px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:6px">Cuando registrar una interaccion:</div>
+            <ul style="font-size:12px;color:var(--text-2);line-height:1.5;padding-left:16px;margin:0">
+              <li>Despues de una llamada</li>
+              <li>Despues de una reunion o demo</li>
+              <li>Cuando mandas un email importante</li>
+              <li>Cuando recibis info relevante del lead</li>
+            </ul>
+          </div>
+          <div style="background:var(--bg-input);border-radius:var(--r-md);padding:12px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-1);margin-bottom:6px">Cuando mover de etapa:</div>
+            <ul style="font-size:12px;color:var(--text-2);line-height:1.5;padding-left:16px;margin:0">
+              <li>Contactado: tras la primera comunicacion</li>
+              <li>Demo: al agendar la demo</li>
+              <li>Propuesta: al enviar cotizacion</li>
+              <li>Negociacion: cuando empiezan a pedir ajustes</li>
+              <li>Ganado/Perdido: al cierre del deal</li>
+            </ul>
+          </div>
+        </div>
+
+        <div style="background:var(--accent-bg);border-radius:var(--r-md);padding:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--accent-text);margin-bottom:4px">💡 Buenas practicas:</div>
+          <div style="font-size:12px;color:var(--accent-text);line-height:1.5">
+            • <strong>Siempre cargar "proxima accion"</strong> con fecha — si esta vencida, aparece en rojo<br>
+            • <strong>Usar tags</strong> para segmentar (ej: "hot", "enterprise", "agencia-chica")<br>
+            • <strong>Valor y probabilidad</strong> ayudan a proyectar el pipeline — cargalos siempre<br>
+            • <strong>Al perder</strong>, carga la razon — eso nos ayuda a mejorar como equipo
+          </div>
+        </div>
+      </div>
+
       <!-- Atajos -->
       <div class="card">
         <h3 style="margin-bottom:12px;display:flex;align-items:center;gap:8px">

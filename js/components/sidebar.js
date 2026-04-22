@@ -39,6 +39,7 @@ const Sidebar = {
         ${navItem('/dashboard', 'dashboard', 'Dashboard')}
         ${navItem('/systems',   'projects',  'Sistemas')}
         ${navItem('/tasks',     'tasks',     'Mis tareas')}
+        ${navItem('/leads',     'leads',     'Leads', (() => { const n = Store.getLeads().filter(l => !['won','lost'].includes(l.status)).length; return n > 0 ? n : null; })(), 'nav-badge orange')}
         ${navItem('/blocks',    'blocks',    'Bloqueos', activeBlocks > 0 ? activeBlocks : null)}
         ${navItem('/notifications', 'bell',  'Notificaciones',
             unread > 0 ? unread : null, 'sidebar-notif-badge')}
