@@ -44,9 +44,9 @@ const Store = (() => {
       sb.from('activity').select('*').order('created_at', { ascending: false }).limit(200),
       sb.from('budgets').select('*'),
       sb.from('notifications').select('*').order('created_at', { ascending: false }).limit(50),
-      sb.from('leads').select('*').order('created_at', { ascending: false }),
-      sb.from('lead_updates').select('*').order('created_at', { ascending: false }),
-      sb.from('lead_groups').select('*').order('created_at', { ascending: false }),
+      sb.from('prospectos').select('*').order('created_at', { ascending: false }),
+      sb.from('interacciones').select('*').order('created_at', { ascending: false }),
+      sb.from('convenios').select('*').order('created_at', { ascending: false }),
     ]);
 
     state.users    = profiles.data || [];
@@ -86,9 +86,9 @@ const Store = (() => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => refreshTable('notifications'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'systems' }, () => refreshTable('systems'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets' }, () => refreshTable('budgets'))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => refreshTable('leads'))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_updates' }, () => refreshTable('lead_updates'))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lead_groups' }, () => refreshTable('lead_groups'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'prospectos' }, () => refreshTable('prospectos'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interacciones' }, () => refreshTable('interacciones'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'convenios' }, () => refreshTable('convenios'))
       .subscribe();
   }
 
@@ -112,18 +112,18 @@ const Store = (() => {
       state.activity = data || [];
       _addCompatToAll();
       emit('activity:changed');
-    } else if (table === 'leads') {
-      const { data } = await sb.from('leads').select('*').order('created_at', { ascending: false });
+    } else if (table === 'prospectos') {
+      const { data } = await sb.from('prospectos').select('*').order('created_at', { ascending: false });
       state.leads = data || [];
       _addCompatToAll();
       emit('leads:changed');
-    } else if (table === 'lead_groups') {
-      const { data } = await sb.from('lead_groups').select('*').order('created_at', { ascending: false });
+    } else if (table === 'convenios') {
+      const { data } = await sb.from('convenios').select('*').order('created_at', { ascending: false });
       state.leadGroups = data || [];
       _addCompatToAll();
       emit('lead_groups:changed');
-    } else if (table === 'lead_updates') {
-      const { data } = await sb.from('lead_updates').select('*').order('created_at', { ascending: false });
+    } else if (table === 'interacciones') {
+      const { data } = await sb.from('interacciones').select('*').order('created_at', { ascending: false });
       state.leadUpdates = {};
       (data || []).forEach(u => {
         if (!state.leadUpdates[u.lead_id]) state.leadUpdates[u.lead_id] = [];
@@ -559,7 +559,7 @@ const Store = (() => {
       color:       data.color || '#0071E3',
       created_by:  currentUser?.id,
     };
-    const { data: g, error } = await sb.from('lead_groups').insert(row).select().single();
+    const { data: g, error } = await sb.from('convenios').insert(row).select().single();
     if (error) { Utils.toast('Error al crear convenio: ' + error.message, 'error'); return null; }
     state.leadGroups.unshift(g);
     emit('lead_groups:changed');
@@ -567,7 +567,7 @@ const Store = (() => {
   }
 
   async function updateLeadGroup(id, data) {
-    const { data: g, error } = await sb.from('lead_groups').update(data).eq('id', id).select().single();
+    const { data: g, error } = await sb.from('convenios').update(data).eq('id', id).select().single();
     if (error) { Utils.toast('Error al actualizar: ' + error.message, 'error'); return; }
     const i = state.leadGroups.findIndex(x => x.id === id);
     if (i >= 0) state.leadGroups[i] = g;
@@ -576,7 +576,7 @@ const Store = (() => {
   }
 
   async function deleteLeadGroup(id) {
-    const { error } = await sb.from('lead_groups').delete().eq('id', id);
+    const { error } = await sb.from('convenios').delete().eq('id', id);
     if (error) { Utils.toast('Error al eliminar: ' + error.message, 'error'); return; }
     state.leadGroups = state.leadGroups.filter(g => g.id !== id);
     emit('lead_groups:changed');
@@ -636,7 +636,7 @@ const Store = (() => {
       notes:            data.notes || '',
       created_by:       currentUser?.id,
     };
-    const { data: l, error } = await sb.from('leads').insert(row).select().single();
+    const { data: l, error } = await sb.from('prospectos').insert(row).select().single();
     if (error) { Utils.toast('Error al crear lead: ' + error.message, 'error'); return null; }
     const lead = _toLeadCompat(l);
     state.leads.unshift(lead);
@@ -673,7 +673,7 @@ const Store = (() => {
       if (data.status === 'lost') payload.lost_at = new Date().toISOString();
     }
 
-    const { data: l, error } = await sb.from('leads').update(payload).eq('id', id).select().single();
+    const { data: l, error } = await sb.from('prospectos').update(payload).eq('id', id).select().single();
     if (error) { Utils.toast('Error al actualizar: ' + error.message, 'error'); return; }
 
     // Update local state
@@ -698,7 +698,7 @@ const Store = (() => {
   }
 
   async function deleteLead(id) {
-    const { error } = await sb.from('leads').delete().eq('id', id);
+    const { error } = await sb.from('prospectos').delete().eq('id', id);
     if (error) { Utils.toast('Error al eliminar: ' + error.message, 'error'); return; }
     state.leads = state.leads.filter(l => l.id !== id);
     delete state.leadUpdates[id];
@@ -711,7 +711,7 @@ const Store = (() => {
   }
 
   async function _addLeadUpdateInternal(leadId, userId, type, text) {
-    const { data: u, error } = await sb.from('lead_updates').insert({
+    const { data: u, error } = await sb.from('interacciones').insert({
       lead_id: leadId, user_id: userId, type, text,
     }).select().single();
     if (error) return null;
