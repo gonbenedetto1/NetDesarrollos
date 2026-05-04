@@ -164,9 +164,9 @@ const Modal = {
         createdBy:      Store.getCurrentUser().id,
         attachments:    pendingAttachments,
       };
-      if (isEdit) { Store.updateTask(prefill.id, data); Utils.toast('Tarea actualizada'); }
-      else { Store.createTask(data); Utils.toast('Tarea creada','success'); }
       this.close();
+      if (isEdit) { Utils.toast('Tarea actualizada'); Store.updateTask(prefill.id, data); }
+      else        { Utils.toast('Tarea creada','success'); Store.createTask(data); }
     };
   },
 
@@ -379,9 +379,9 @@ const Modal = {
     document.getElementById('mc-cancel').onclick  = () => this.close();
     document.getElementById('mc-confirm').onclick = () => {
       const hours = parseFloat(document.getElementById('complete-hours').value) || 0;
-      Store.updateTask(taskId, { status: 'done', progress: 100, actualHours: hours });
-      Utils.toast('Tarea finalizada', 'success');
       this.close();
+      Utils.toast('Tarea finalizada', 'success');
+      Store.updateTask(taskId, { status: 'done', progress: 100, actualHours: hours });
       Panel.openTask(taskId);
     };
     setTimeout(() => { const inp = document.getElementById('complete-hours'); if (inp) inp.select(); }, 100);
@@ -502,10 +502,16 @@ const Modal = {
         notes:           document.getElementById('l-notes').value,
       };
 
-      if (isEdit) { await Store.updateLead(prefill.id, data); Utils.toast('Lead actualizado'); }
-      else        { const res = await Store.createLead(data); if (!res) return; Utils.toast('Lead creado','success'); }
+      // Cerrar primero, mostrar toast inmediato, despues hacer la llamada (optimistic en el Store)
       this.close();
-      if (isEdit) Panel.openLead(prefill.id);
+      if (isEdit) {
+        Utils.toast('Lead actualizado');
+        Store.updateLead(prefill.id, data);
+        Panel.openLead(prefill.id);
+      } else {
+        Utils.toast('Lead creado','success');
+        Store.createLead(data);
+      }
     };
   },
 
@@ -559,9 +565,9 @@ const Modal = {
         description: document.getElementById('g-desc').value,
         color: selectedColor,
       };
-      if (isEdit) { await Store.updateLeadGroup(prefill.id, data); Utils.toast('Convenio actualizado'); }
-      else        { const res = await Store.createLeadGroup(data); if (!res) return; Utils.toast('Convenio creado','success'); }
       this.close();
+      if (isEdit) { Utils.toast('Convenio actualizado'); Store.updateLeadGroup(prefill.id, data); }
+      else        { Utils.toast('Convenio creado','success'); Store.createLeadGroup(data); }
     };
     const delBtn = document.getElementById('mc-delete');
     if (delBtn) {
@@ -619,9 +625,9 @@ const Modal = {
       const text = document.getElementById('u-text').value.trim();
       if (!text) { Utils.toast('Describí la interaccion','error'); return; }
       const type = document.getElementById('u-type').value;
-      await Store.addLeadUpdate(leadId, type, text);
-      Utils.toast('Interaccion registrada','success');
       this.close();
+      Utils.toast('Interaccion registrada','success');
+      Store.addLeadUpdate(leadId, type, text);
       Panel.openLead(leadId);
     };
   },
@@ -660,9 +666,9 @@ const Modal = {
       const reason = document.getElementById('lost-reason-select').value;
       const note   = document.getElementById('lost-note').value.trim();
       const fullReason = note ? `${reason} — ${note}` : reason;
-      await Store.updateLead(leadId, { status: 'lost', lostReason: fullReason });
-      Utils.toast('Lead marcado como perdido','error');
       this.close();
+      Utils.toast('Lead marcado como perdido','error');
+      Store.updateLead(leadId, { status: 'lost', lostReason: fullReason });
       Panel.openLead(leadId);
     };
   },
@@ -694,10 +700,10 @@ const Modal = {
     document.getElementById('mc-cancel').onclick = () => this.close();
     document.getElementById('mc-save').onclick   = async () => {
       const note = document.getElementById('won-note').value.trim();
-      await Store.updateLead(leadId, { status: 'won' });
-      if (note) await Store.addLeadUpdate(leadId, 'note', 'Cierre: ' + note);
-      Utils.toast('¡Cerrado! 🎉','success');
       this.close();
+      Utils.toast('¡Cerrado! 🎉','success');
+      Store.updateLead(leadId, { status: 'won' });
+      if (note) Store.addLeadUpdate(leadId, 'note', 'Cierre: ' + note);
       Panel.openLead(leadId);
     };
   },
@@ -1117,7 +1123,7 @@ const Panel = {
         const text = commentInput.value.trim();
         if (!text) return;
         commentInput.value = '';
-        await Store.addLeadUpdate(leadId, 'comment', text);
+        Store.addLeadUpdate(leadId, 'comment', text);
         Panel.openLead(leadId);
       };
       commentSend.onclick = sendComment;

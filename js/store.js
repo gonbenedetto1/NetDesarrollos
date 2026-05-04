@@ -223,20 +223,36 @@ const Store = (() => {
       tags: data.tags || [],
       attachments: data.attachments || [],
     };
+
+    // OPTIMISTIC
+    const tempId = 'temp_t_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const optimistic = _toTaskCompat({ ...row, id: tempId, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), _temp: true });
+    state.tasks.push(optimistic);
+    emit('tasks:changed');
+    emit('tasks:changed:' + row.system_id);
+
     const { data: t, error } = await sb.from('tasks').insert(row).select().single();
-    if (error) { console.error(error); return null; }
-    state.tasks.push(t);
-
-    // Activity
-    await _logActivity(row.created_by, 'created', t.id, `creo la tarea "${t.title}"`);
-
-    // Notify assignee
-    if (t.assigned_to && t.assigned_to !== t.created_by) {
-      await _addNotification(t.assigned_to, 'assigned', t.id, `${_userName(t.created_by)} te asigno la tarea "${t.title}"`);
+    if (error) {
+      state.tasks = state.tasks.filter(x => x.id !== tempId);
+      emit('tasks:changed');
+      emit('tasks:changed:' + row.system_id);
+      console.error(error);
+      Utils.toast('Error al crear tarea: ' + error.message, 'error');
+      return null;
     }
 
+    const i = state.tasks.findIndex(x => x.id === tempId);
+    if (i >= 0) state.tasks[i] = _toTaskCompat(t);
+    else state.tasks.push(_toTaskCompat(t));
     emit('tasks:changed');
     emit('tasks:changed:' + t.system_id);
+
+    // Background activity + notifications
+    _logActivity(row.created_by, 'created', t.id, `creo la tarea "${t.title}"`);
+    if (t.assigned_to && t.assigned_to !== t.created_by) {
+      _addNotification(t.assigned_to, 'assigned', t.id, `${_userName(t.created_by)} te asigno la tarea "${t.title}"`);
+    }
+
     return _toTaskCompat(t);
   }
 
@@ -259,28 +275,43 @@ const Store = (() => {
     if (data.tags !== undefined)            payload.tags = data.tags;
     if (data.attachments !== undefined)     payload.attachments = data.attachments;
 
-    const { data: t, error } = await sb.from('tasks').update(payload).eq('id', id).select().single();
-    if (error) { console.error(error); return null; }
-
+    // OPTIMISTIC
     const i = state.tasks.findIndex(x => x.id === id);
-    if (i >= 0) state.tasks[i] = t;
-
-    // Activity logs
-    if (data.status && data.status !== old.status) {
-      const labels = { done:'finalizo', blocked:'bloqueo', in_progress:'inicio', review:'puso en revision', pending:'devolvio a pendiente' };
-      await _logActivity(currentUser?.id || old.created_by, data.status, id, `${labels[data.status] || 'actualizo'} "${old.title}"`);
+    const prev = i >= 0 ? { ...state.tasks[i] } : null;
+    if (i >= 0) {
+      state.tasks[i] = _toTaskCompat({ ...state.tasks[i], ...payload });
     }
-    if (data.progress !== undefined && data.progress !== old.progress) {
-      await _logActivity(currentUser?.id || old.created_by, 'progress_updated', id, `actualizo progreso a ${data.progress}% en "${old.title}"`);
-    }
-    // Notify new assignee
-    if (data.assignedTo && data.assignedTo !== old.assigned_to && data.assignedTo !== currentUser?.id) {
-      await _addNotification(data.assignedTo, 'assigned', id, `${currentUser?.name || 'Alguien'} te asigno la tarea "${old.title}"`);
-    }
-
     emit('tasks:changed');
     emit('tasks:changed:' + old.system_id);
     emit('task:updated', id);
+
+    const { data: t, error } = await sb.from('tasks').update(payload).eq('id', id).select().single();
+    if (error) {
+      // Rollback
+      if (i >= 0 && prev) state.tasks[i] = prev;
+      emit('tasks:changed');
+      emit('tasks:changed:' + old.system_id);
+      console.error(error);
+      Utils.toast('Error al actualizar: ' + error.message, 'error');
+      return null;
+    }
+
+    if (i >= 0) state.tasks[i] = _toTaskCompat(t);
+    emit('tasks:changed');
+    emit('tasks:changed:' + old.system_id);
+
+    // Background activity logs
+    if (data.status && data.status !== old.status) {
+      const labels = { done:'finalizo', blocked:'bloqueo', in_progress:'inicio', review:'puso en revision', pending:'devolvio a pendiente' };
+      _logActivity(currentUser?.id || old.created_by, data.status, id, `${labels[data.status] || 'actualizo'} "${old.title}"`);
+    }
+    if (data.progress !== undefined && data.progress !== old.progress) {
+      _logActivity(currentUser?.id || old.created_by, 'progress_updated', id, `actualizo progreso a ${data.progress}% en "${old.title}"`);
+    }
+    if (data.assignedTo && data.assignedTo !== old.assigned_to && data.assignedTo !== currentUser?.id) {
+      _addNotification(data.assignedTo, 'assigned', id, `${currentUser?.name || 'Alguien'} te asigno la tarea "${old.title}"`);
+    }
+
     return _toTaskCompat(t);
   }
 
@@ -291,10 +322,25 @@ const Store = (() => {
   function getBlocksForTask(taskId) { return state.blocks.filter(b => b.task_id === taskId); }
 
   async function createBlock(taskId, description, reportedBy) {
+    // OPTIMISTIC
+    const tempId = 'temp_b_' + Date.now();
+    const optimistic = { id: tempId, task_id: taskId, description, reported_by: reportedBy, status: 'active', severity: 'high', created_at: new Date().toISOString(), _temp: true };
+    state.blocks.unshift(optimistic);
+    emit('blocks:changed');
+    updateTask(taskId, { status: 'blocked' });
+
     const { data: b, error } = await sb.from('blocks').insert({ task_id: taskId, description, reported_by: reportedBy, status: 'active', severity: 'high' }).select().single();
-    if (error) { console.error(error); return null; }
-    state.blocks.unshift(b);
-    await updateTask(taskId, { status: 'blocked' });
+    if (error) {
+      state.blocks = state.blocks.filter(x => x.id !== tempId);
+      emit('blocks:changed');
+      console.error(error);
+      Utils.toast('Error al crear bloqueo: ' + error.message, 'error');
+      return null;
+    }
+
+    const i = state.blocks.findIndex(x => x.id === tempId);
+    if (i >= 0) state.blocks[i] = b;
+    else state.blocks.unshift(b);
     emit('blocks:changed');
     return b;
   }
@@ -333,20 +379,36 @@ const Store = (() => {
   function getComments(taskId) { return state.comments[taskId] || []; }
 
   async function addComment(taskId, userId, text) {
-    const { data: c, error } = await sb.from('comments').insert({ task_id: taskId, user_id: userId, text }).select().single();
-    if (error) { console.error(error); return null; }
+    // OPTIMISTIC
+    const tempId = 'temp_c_' + Date.now();
+    const optimistic = { id: tempId, task_id: taskId, user_id: userId, text, created_at: new Date().toISOString(), _temp: true };
     if (!state.comments[taskId]) state.comments[taskId] = [];
-    state.comments[taskId].push(c);
+    state.comments[taskId].push(optimistic);
+    _addCompatToAll();
+    emit('comments:changed:' + taskId);
 
-    await _logActivity(userId, 'commented', taskId, `comento en "${getTaskById(taskId)?.title || ''}"`);
+    const { data: c, error } = await sb.from('comments').insert({ task_id: taskId, user_id: userId, text }).select().single();
+    if (error) {
+      state.comments[taskId] = state.comments[taskId].filter(x => x.id !== tempId);
+      emit('comments:changed:' + taskId);
+      console.error(error);
+      return null;
+    }
 
-    // @mention notifications
+    const idx = state.comments[taskId].findIndex(x => x.id === tempId);
+    if (idx >= 0) state.comments[taskId][idx] = c;
+    else state.comments[taskId].push(c);
+    _addCompatToAll();
+    emit('comments:changed:' + taskId);
+
+    // Background activity + notifications
+    _logActivity(userId, 'commented', taskId, `comento en "${getTaskById(taskId)?.title || ''}"`);
     const mentioned = _parseMentions(text);
     const senderName = _userName(userId);
     const task = getTaskById(taskId);
     for (const uid of mentioned) {
       if (uid !== userId) {
-        await _addNotification(uid, 'mention', taskId, `${senderName} te menciono en "${task?.title || 'tarea'}"`);
+        _addNotification(uid, 'mention', taskId, `${senderName} te menciono en "${task?.title || 'tarea'}"`);
       }
     }
 
@@ -559,28 +621,58 @@ const Store = (() => {
       color:       data.color || '#0071E3',
       created_by:  currentUser?.id,
     };
+
+    // OPTIMISTIC
+    const tempId = 'temp_g_' + Date.now();
+    const optimistic = { ...row, id: tempId, created_at: new Date().toISOString(), _temp: true };
+    state.leadGroups.unshift(optimistic);
+    emit('lead_groups:changed');
+
     const { data: g, error } = await sb.from('convenios').insert(row).select().single();
-    if (error) { Utils.toast('Error al crear convenio: ' + error.message, 'error'); return null; }
-    state.leadGroups.unshift(g);
+    if (error) {
+      state.leadGroups = state.leadGroups.filter(x => x.id !== tempId);
+      emit('lead_groups:changed');
+      Utils.toast('Error al crear convenio: ' + error.message, 'error');
+      return null;
+    }
+    const i = state.leadGroups.findIndex(x => x.id === tempId);
+    if (i >= 0) state.leadGroups[i] = g;
+    else state.leadGroups.unshift(g);
     emit('lead_groups:changed');
     return g;
   }
 
   async function updateLeadGroup(id, data) {
-    const { data: g, error } = await sb.from('convenios').update(data).eq('id', id).select().single();
-    if (error) { Utils.toast('Error al actualizar: ' + error.message, 'error'); return; }
     const i = state.leadGroups.findIndex(x => x.id === id);
+    const prev = i >= 0 ? { ...state.leadGroups[i] } : null;
+    if (i >= 0) state.leadGroups[i] = { ...state.leadGroups[i], ...data };
+    emit('lead_groups:changed');
+
+    const { data: g, error } = await sb.from('convenios').update(data).eq('id', id).select().single();
+    if (error) {
+      if (i >= 0 && prev) state.leadGroups[i] = prev;
+      emit('lead_groups:changed');
+      Utils.toast('Error al actualizar: ' + error.message, 'error');
+      return;
+    }
     if (i >= 0) state.leadGroups[i] = g;
     emit('lead_groups:changed');
     return g;
   }
 
   async function deleteLeadGroup(id) {
-    const { error } = await sb.from('convenios').delete().eq('id', id);
-    if (error) { Utils.toast('Error al eliminar: ' + error.message, 'error'); return; }
-    state.leadGroups = state.leadGroups.filter(g => g.id !== id);
+    const idx = state.leadGroups.findIndex(g => g.id === id);
+    const removed = idx >= 0 ? state.leadGroups[idx] : null;
+    if (idx >= 0) state.leadGroups.splice(idx, 1);
     emit('lead_groups:changed');
-    emit('leads:changed'); // leads referencing this group get group_id = null
+    emit('leads:changed');
+
+    const { error } = await sb.from('convenios').delete().eq('id', id);
+    if (error) {
+      if (removed) state.leadGroups.splice(idx, 0, removed);
+      emit('lead_groups:changed');
+      Utils.toast('Error al eliminar: ' + error.message, 'error');
+    }
   }
 
   function getGroupStats(groupId) {
@@ -636,20 +728,43 @@ const Store = (() => {
       notes:            data.notes || '',
       created_by:       currentUser?.id,
     };
+
+    // OPTIMISTIC: insertar en state con id temporal y emitir cambio inmediato
+    const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const optimistic = _toLeadCompat({
+      ...row,
+      id: tempId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      lost_reason: null, won_at: null, lost_at: null,
+      _temp: true,
+    });
+    state.leads.unshift(optimistic);
+    emit('leads:changed');
+
+    // Background: insert real en Supabase
     const { data: l, error } = await sb.from('prospectos').insert(row).select().single();
-    if (error) { Utils.toast('Error al crear lead: ' + error.message, 'error'); return null; }
-    const lead = _toLeadCompat(l);
-    state.leads.unshift(lead);
-
-    // Initial status_change update
-    await _addLeadUpdateInternal(lead.id, currentUser?.id, 'status_change', `creo el lead (etapa: ${_leadStatusLabel(lead.status)})`);
-
-    // Notify owner if not creator
-    if (lead.owner_id && lead.owner_id !== currentUser?.id) {
-      await _addNotification(lead.owner_id, 'assigned', null, `${_userName(currentUser?.id)} te asigno el lead "${lead.name}"`);
+    if (error) {
+      // Rollback
+      state.leads = state.leads.filter(x => x.id !== tempId);
+      emit('leads:changed');
+      Utils.toast('Error al crear lead: ' + error.message, 'error');
+      return null;
     }
 
+    // Reemplazar optimistic con real
+    const lead = _toLeadCompat(l);
+    const i = state.leads.findIndex(x => x.id === tempId);
+    if (i >= 0) state.leads[i] = lead;
+    else state.leads.unshift(lead);
     emit('leads:changed');
+
+    // Background: log activity + notification (no bloqueamos el caller)
+    _addLeadUpdateInternal(lead.id, currentUser?.id, 'status_change', `creo el lead (etapa: ${_leadStatusLabel(lead.status)})`);
+    if (lead.owner_id && lead.owner_id !== currentUser?.id) {
+      _addNotification(lead.owner_id, 'assigned', null, `${_userName(currentUser?.id)} te asigno el lead "${lead.name}"`);
+    }
+
     return lead;
   }
 
@@ -673,36 +788,58 @@ const Store = (() => {
       if (data.status === 'lost') payload.lost_at = new Date().toISOString();
     }
 
-    const { data: l, error } = await sb.from('prospectos').update(payload).eq('id', id).select().single();
-    if (error) { Utils.toast('Error al actualizar: ' + error.message, 'error'); return; }
-
-    // Update local state
+    // OPTIMISTIC: aplicar cambios al state inmediato
     const i = state.leads.findIndex(x => x.id === id);
-    if (i >= 0) { state.leads[i] = _toLeadCompat(l); }
+    const prev = i >= 0 ? { ...state.leads[i] } : null;
+    if (i >= 0) {
+      state.leads[i] = _toLeadCompat({ ...state.leads[i], ...payload });
+    }
+    emit('leads:changed');
 
-    // Log status change as an update entry
+    // Background: update real en Supabase
+    const { data: l, error } = await sb.from('prospectos').update(payload).eq('id', id).select().single();
+    if (error) {
+      // Rollback
+      if (i >= 0 && prev) state.leads[i] = prev;
+      emit('leads:changed');
+      Utils.toast('Error al actualizar: ' + error.message, 'error');
+      return;
+    }
+
+    if (i >= 0) state.leads[i] = _toLeadCompat(l);
+    emit('leads:changed');
+
+    // Background: log + notify
     if (statusChanged) {
       const text = data.status === 'won' ? `marco como CERRADO ✓`
                  : data.status === 'lost' ? `marco como PERDIDO${data.lostReason ? ' — ' + data.lostReason : ''}`
                  : `movio a etapa "${_leadStatusLabel(data.status)}"`;
-      await _addLeadUpdateInternal(id, currentUser?.id, 'status_change', text);
+      _addLeadUpdateInternal(id, currentUser?.id, 'status_change', text);
     }
-
-    // Notify new owner
     if (data.ownerId && data.ownerId !== old.owner_id && data.ownerId !== currentUser?.id) {
-      await _addNotification(data.ownerId, 'assigned', null, `${_userName(currentUser?.id)} te asigno el lead "${old.name}"`);
+      _addNotification(data.ownerId, 'assigned', null, `${_userName(currentUser?.id)} te asigno el lead "${old.name}"`);
     }
 
-    emit('leads:changed');
     return state.leads[i];
   }
 
   async function deleteLead(id) {
-    const { error } = await sb.from('prospectos').delete().eq('id', id);
-    if (error) { Utils.toast('Error al eliminar: ' + error.message, 'error'); return; }
-    state.leads = state.leads.filter(l => l.id !== id);
+    // OPTIMISTIC: borrar del state inmediato
+    const idx = state.leads.findIndex(l => l.id === id);
+    const removed = idx >= 0 ? state.leads[idx] : null;
+    if (idx >= 0) state.leads.splice(idx, 1);
+    const removedUpdates = state.leadUpdates[id];
     delete state.leadUpdates[id];
     emit('leads:changed');
+
+    const { error } = await sb.from('prospectos').delete().eq('id', id);
+    if (error) {
+      // Rollback
+      if (removed) state.leads.splice(idx, 0, removed);
+      if (removedUpdates) state.leadUpdates[id] = removedUpdates;
+      emit('leads:changed');
+      Utils.toast('Error al eliminar: ' + error.message, 'error');
+    }
   }
 
   async function addLeadUpdate(leadId, type, text) {
@@ -711,12 +848,29 @@ const Store = (() => {
   }
 
   async function _addLeadUpdateInternal(leadId, userId, type, text) {
+    // OPTIMISTIC
+    const tempId = 'temp_u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const optimistic = { id: tempId, lead_id: leadId, user_id: userId, type, text, created_at: new Date().toISOString(), _temp: true };
+    if (!state.leadUpdates[leadId]) state.leadUpdates[leadId] = [];
+    state.leadUpdates[leadId].unshift(optimistic);
+    _addCompatToAll();
+    emit('lead_updates:changed');
+
     const { data: u, error } = await sb.from('interacciones').insert({
       lead_id: leadId, user_id: userId, type, text,
     }).select().single();
-    if (error) return null;
-    if (!state.leadUpdates[leadId]) state.leadUpdates[leadId] = [];
-    state.leadUpdates[leadId].unshift(u);
+
+    if (error) {
+      // Rollback
+      state.leadUpdates[leadId] = state.leadUpdates[leadId].filter(x => x.id !== tempId);
+      emit('lead_updates:changed');
+      return null;
+    }
+
+    // Reemplazar
+    const i = state.leadUpdates[leadId].findIndex(x => x.id === tempId);
+    if (i >= 0) state.leadUpdates[leadId][i] = u;
+    else state.leadUpdates[leadId].unshift(u);
     _addCompatToAll();
     emit('lead_updates:changed');
     return u;
